@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 import uuid
@@ -57,12 +58,6 @@ async def ask_database(
     started = time.perf_counter()
     trace_id = str(uuid.uuid4())
     config = load_config()
-    request = AskDatabaseRequest(
-        question=question,
-        max_rows=max_rows,
-        include_sql=include_sql,
-        context=context,
-    )
     scopes = _scopes_from_context(ctx)
 
     def response(**kwargs: Any) -> dict[str, Any]:
@@ -71,29 +66,36 @@ async def ask_database(
         return AskDatabaseResponse(trace_id=trace_id, elapsed_ms=elapsed_ms, **kwargs).model_dump()
 
     try:
+        request = AskDatabaseRequest(
+            question=question,
+            max_rows=max_rows,
+            include_sql=include_sql,
+            context=context,
+        )
         # Authorization must fail closed if the trusted Gateway scope header is absent.
         if not has_scope(scopes, config.authorization.required_scope):
             raise PermissionError("missing_required_scope")
         validate_question(request.question, config)
         validate_context(request.context, config)
-        bounded_rows = min(
-            request.max_rows or config.query.default_max_rows,
-            config.query.absolute_max_rows,
-        )
-        # LLM output is always treated as untrusted until validate_sql succeeds.
-        candidate = await generate_sql(
-            config, request.question, bounded_rows, request.context
-        )
-        validated = validate_sql(candidate.sql, config, bounded_rows)
-        result = await execute_read_only_sql(validated.sql, config)
-        rows = normalize_rows(result.rows, config)
-        summary = await summarize_results(
-            config,
-            request.question,
-            rows[: config.output.max_summary_rows],
-            candidate.assumptions,
-            truncated=len(result.rows) > len(rows),
-        )
+        async with asyncio.timeout(config.query.timeout_seconds):
+            bounded_rows = min(
+                request.max_rows or config.query.default_max_rows,
+                config.query.absolute_max_rows,
+            )
+            # LLM output is always treated as untrusted until validate_sql succeeds.
+            candidate = await generate_sql(
+                config, request.question, bounded_rows, request.context
+            )
+            validated = validate_sql(candidate.sql, config, bounded_rows)
+            result = await execute_read_only_sql(validated.sql, config)
+            rows = normalize_rows(result.rows, config)
+            summary = await summarize_results(
+                config,
+                request.question,
+                rows[: config.output.max_summary_rows],
+                candidate.assumptions,
+                truncated=len(result.rows) > len(rows),
+            )
         can_show_sql = request.include_sql and (
             config.query.allow_sql_by_default
             or has_scope(scopes, config.authorization.sql_viewer_scope)

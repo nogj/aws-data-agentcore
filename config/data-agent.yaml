@@ -1,4 +1,4 @@
-version: "1.3.0"
+version: "1.4.0"
 agent:
   name: read-only-data-agent
   environment: prod
@@ -46,7 +46,7 @@ messages:
 query:
   default_max_rows: 50
   absolute_max_rows: 200
-  timeout_seconds: 30
+  timeout_seconds: 45
   allow_sql_by_default: false
   max_question_length: 2000
   max_context_items: 10

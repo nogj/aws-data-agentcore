@@ -25,6 +25,7 @@ def _chat_model(config: AppConfig):
         return ChatBedrockConverse(
             model=config.llm.bedrock_model_id or config.llm.model,
             temperature=config.llm.temperature,
+            timeout=config.llm.timeout_seconds,
         )
     raise ValueError(f"Proveedor LLM no soportado: {config.llm.provider}")
 

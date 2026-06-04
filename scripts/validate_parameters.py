@@ -62,6 +62,15 @@ def main() -> None:
     if provider == "openai" and not parameters.get("openai_secret_arn"):
         raise SystemExit("openai_secret_arn is required when llm.provider is openai")
 
+    query_timeout = config.get("query", {}).get("timeout_seconds", 0)
+    statement_timeout_ms = config.get("database", {}).get("statement_timeout_ms", 0)
+    required_query_timeout = statement_timeout_ms / 1000 + 5
+    if query_timeout <= required_query_timeout:
+        raise SystemExit(
+            "query.timeout_seconds must be at least 5 seconds greater than "
+            "database.statement_timeout_ms"
+        )
+
 
 if __name__ == "__main__":
     main()

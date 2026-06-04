@@ -76,6 +76,8 @@ aws secretsmanager create-secret \
    exists and otherwise fall back to `parameters.json`. They stop before
    deployment if any `REPLACE` marker remains or if the scope, secret path, or
    Bedrock model geography is inconsistent.
+   The committed `parameters.json` is a template and is not expected to deploy
+   unchanged.
 
 6. Only when OpenAI has been approved for the configured data classification,
    create `/data-agent/<environment>/openai`, set `llm.provider: openai`, and
@@ -108,6 +110,15 @@ the Bedrock inference profile can be resolved from the configured Region. A
 successful Runtime deployment and smoke test are still required to prove
 AgentCore AZ support, service endpoint access, and database connectivity.
 
+`smoke_test.sh` performs both MCP discovery and an actual `tools/call` to
+`ask_database`. Override the safe question with `SMOKE_QUESTION` and the row
+bound with `SMOKE_MAX_ROWS`.
+
+Versioned artifacts and configuration keys are published immutably. Use
+`scripts/cleanup_artifacts.py` to remove keys that are not referenced by the
+active manifest, the retained manifest window, or the currently deployed
+Runtime stack parameters. It runs as a dry run unless `--apply` is passed.
+
 ## Configuration
 
 The runtime receives only bootstrap references:
@@ -129,6 +140,14 @@ section contains SQL generation and result summarization instructions.
 Optional `context` input is bounded by item count and key/value length before it
 can be included in a prompt. SQL columns are validated against their configured
 relation rather than a global union of authorized columns.
+
+`query.timeout_seconds` bounds the complete request path after basic validation:
+SQL generation, database execution, and result summarization. The database has
+its own `statement_timeout_ms`, and each LLM provider receives
+`llm.timeout_seconds` where supported. Keep the global query timeout greater
+than the database statement timeout plus operational margin, because cancelling
+the async request does not forcibly stop a synchronous DB thread before the
+database-side timeout fires.
 
 Supporting another database requires its SQLAlchemy driver, a matching SQLGlot
 dialect, and an adapter in `app/database.py` that applies equivalent read-only
@@ -165,7 +184,7 @@ access is granted.
 The artifact bucket never expires current objects automatically, because the
 Runtime may still reference a versioned artifact or configuration key.
 Noncurrent versions of overwritten keys expire after the configured retention
-period. Implement manifest-aware cleanup for unreferenced versioned keys. The
+period. Run the manifest-aware cleanup script for unreferenced versioned keys. The
 scope interceptor log group has explicit retention. Confirm and configure
 retention for AgentCore-managed Runtime and Gateway logs according to the
 organization logging standard.

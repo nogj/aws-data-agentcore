@@ -1,8 +1,7 @@
 .PHONY: test lint
 
 test:
-	pytest -q
+	../venv/bin/python -m pytest -q
 
 lint:
-	ruff check app main.py tests scripts/configure_gateway_target.py
-
+	../venv/bin/python -m ruff check app main.py tests scripts
