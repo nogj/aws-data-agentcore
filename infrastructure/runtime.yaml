@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: AgentCore Runtime for the read-only data agent.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, pre, prod]
+  ArtifactBucketName:
+    Type: String
+  ArtifactKey:
+    Type: String
+  ConfigKey:
+    Type: String
+  RuntimeRoleArn:
+    Type: String
+  DatabaseSecretArn:
+    Type: String
+  OpenAISecretArn:
+    Type: String
+    Default: ""
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+  RuntimeSecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+
+Resources:
+  Runtime:
+    Type: AWS::BedrockAgentCore::Runtime
+    Properties:
+      AgentRuntimeName: !Sub "read_only_data_agent_${Environment}"
+      Description: Stateless read-only database MCP server.
+      AgentRuntimeArtifact:
+        CodeConfiguration:
+          Code:
+            S3:
+              Bucket: !Ref ArtifactBucketName
+              Prefix: !Ref ArtifactKey
+          Runtime: PYTHON_3_13
+          EntryPoint:
+            - main.py
+      ProtocolConfiguration: MCP
+      RequestHeaderConfiguration:
+        RequestHeaderAllowlist:
+          - x-data-agent-scopes
+      NetworkConfiguration:
+        NetworkMode: VPC
+        NetworkModeConfig:
+          Subnets: !Ref PrivateSubnetIds
+          SecurityGroups: !Ref RuntimeSecurityGroupIds
+      RoleArn: !Ref RuntimeRoleArn
+      EnvironmentVariables:
+        APP_ENV: !Ref Environment
+        CONFIG_BUCKET: !Ref ArtifactBucketName
+        CONFIG_KEY: !Ref ConfigKey
+        DATABASE_SECRET_ARN: !Ref DatabaseSecretArn
+        OPENAI_SECRET_ARN: !Ref OpenAISecretArn
+        AWS_REGION: !Ref AWS::Region
+      LifecycleConfiguration:
+        IdleRuntimeSessionTimeout: 300
+        MaxLifetime: 3600
+      Tags:
+        Environment: !Ref Environment
+        Application: read-only-data-agent
+
+Outputs:
+  RuntimeArn:
+    Value: !Ref Runtime
+  RuntimeId:
+    Value: !GetAtt Runtime.AgentRuntimeId

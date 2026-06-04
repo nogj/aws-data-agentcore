@@ -1,0 +1,278 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Bootstrap resources for the read-only data agent.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, pre, prod]
+  ArtifactBucketName:
+    Type: String
+  JwtDiscoveryUrl:
+    Type: String
+  JwtAllowedAudience:
+    Type: String
+  RequiredScope:
+    Type: String
+    Default: data:read
+  NoncurrentVersionRetentionDays:
+    Type: Number
+    Default: 90
+    MinValue: 1
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    MinValue: 1
+
+Resources:
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref ArtifactBucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: ExpireOldArtifacts
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref NoncurrentVersionRetentionDays
+
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt ArtifactBucket.Arn
+              - !Sub "${ArtifactBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  RuntimeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "data-agent-runtime-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:*"
+      Policies:
+        - PolicyName: RuntimeMinimumAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadAgentArtifactsAndConfig
+                Effect: Allow
+                Action: [s3:GetObject, s3:GetObjectVersion]
+                Resource: !Sub "${ArtifactBucket.Arn}/*"
+              - Sid: ReadRuntimeSecrets
+                Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/data-agent/${Environment}/*"
+              - Sid: InvokeBedrockModels
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: "*"
+              - Sid: WriteLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:DescribeLogStreams
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*"
+              - Sid: DescribeLogGroups
+                Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: "*"
+
+  GatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "data-agent-gateway-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:*"
+      Policies:
+        - PolicyName: InvokeAgentCoreRuntime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: bedrock-agentcore:InvokeAgentRuntime
+                Resource: "*"
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt ScopePropagationFunction.Arn
+
+  ScopePropagationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "data-agent-scope-propagation-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+
+  ScopePropagationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "data-agent-scope-propagation-${Environment}"
+      Description: Propagates validated JWT scopes to the data agent Runtime.
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt ScopePropagationRole.Arn
+      Timeout: 5
+      Environment:
+        Variables:
+          REQUIRED_SCOPE: !Ref RequiredScope
+      Code:
+        ZipFile: |
+          import base64
+          import json
+          import os
+
+
+          def _decode_scopes(authorization):
+              token = authorization.removeprefix("Bearer ").strip()
+              payload = token.split(".")[1]
+              payload += "=" * (-len(payload) % 4)
+              claims = json.loads(base64.urlsafe_b64decode(payload))
+              raw = claims.get("scope", claims.get("scp", []))
+              return raw.split() if isinstance(raw, str) else list(raw)
+
+
+          def handler(event, _context):
+              request = event.get("mcp", {}).get("gatewayRequest", {})
+              headers = request.get("headers", {})
+              normalized_headers = {key.lower(): value for key, value in headers.items()}
+              try:
+                  scopes = _decode_scopes(normalized_headers.get("authorization", ""))
+              except Exception:
+                  scopes = []
+
+              required_scope = os.environ["REQUIRED_SCOPE"]
+              if required_scope not in scopes:
+                  return {
+                      "interceptorOutputVersion": "1.0",
+                      "mcp": {
+                          "transformedGatewayResponse": {
+                              "statusCode": 200,
+                              "body": {
+                                  "jsonrpc": "2.0",
+                                  "id": request.get("body", {}).get("id"),
+                                  "error": {"code": -32001, "message": "Forbidden"},
+                              },
+                          }
+                      },
+                  }
+
+              # Never trust a client-provided scope header; replace it from JWT claims.
+              forwarded = {
+                  key: value
+                  for key, value in headers.items()
+                  if key.lower() not in {"authorization", "x-data-agent-scopes"}
+              }
+              forwarded["x-data-agent-scopes"] = " ".join(sorted(set(scopes)))
+              return {
+                  "interceptorOutputVersion": "1.0",
+                  "mcp": {
+                      "transformedGatewayRequest": {
+                          "headers": forwarded,
+                          "body": request.get("body", {}),
+                      }
+                  },
+              }
+
+  ScopePropagationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ScopePropagationFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  Gateway:
+    Type: AWS::BedrockAgentCore::Gateway
+    Properties:
+      Name: !Sub "data-agent-${Environment}"
+      Description: Public MCP facade for the read-only data agent.
+      ProtocolType: MCP
+      ProtocolConfiguration:
+        Mcp:
+          Instructions: Use ask_database only for authorized read-only database questions.
+          SupportedVersions:
+            - "2025-06-18"
+      AuthorizerType: CUSTOM_JWT
+      AuthorizerConfiguration:
+        CustomJWTAuthorizer:
+          DiscoveryUrl: !Ref JwtDiscoveryUrl
+          AllowedAudience:
+            - !Ref JwtAllowedAudience
+          AllowedScopes:
+            - !Ref RequiredScope
+      InterceptorConfigurations:
+        - InterceptionPoints:
+            - REQUEST
+          InputConfiguration:
+            PassRequestHeaders: true
+          Interceptor:
+            Lambda:
+              Arn: !GetAtt ScopePropagationFunction.Arn
+      RoleArn: !GetAtt GatewayRole.Arn
+      Tags:
+        Environment: !Ref Environment
+        Application: read-only-data-agent
+
+Outputs:
+  ArtifactBucketName:
+    Value: !Ref ArtifactBucket
+  RuntimeRoleArn:
+    Value: !GetAtt RuntimeRole.Arn
+  GatewayIdentifier:
+    Value: !Ref Gateway
+  GatewayUrl:
+    Value: !GetAtt Gateway.GatewayUrl

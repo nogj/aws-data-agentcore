@@ -1,0 +1,9 @@
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+infrastructure/parameters.dev.json
+infrastructure/parameters.pre.json
+infrastructure/parameters.prod.json

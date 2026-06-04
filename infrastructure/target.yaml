@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: AgentCore Gateway target for the read-only data agent.
+
+Parameters:
+  GatewayIdentifier:
+    Type: String
+  RuntimeEndpointUrl:
+    Type: String
+
+Resources:
+  GatewayTarget:
+    Type: AWS::BedrockAgentCore::GatewayTarget
+    Properties:
+      GatewayIdentifier: !Ref GatewayIdentifier
+      Name: data-agent
+      Description: Public MCP target for ask_database.
+      MetadataConfiguration:
+        AllowedRequestHeaders:
+          - x-data-agent-scopes
+      TargetConfiguration:
+        Mcp:
+          McpServer:
+            Endpoint: !Ref RuntimeEndpointUrl
+      CredentialProviderConfigurations:
+        - CredentialProviderType: GATEWAY_IAM_ROLE
+          CredentialProvider:
+            IamCredentialProvider:
+              Service: bedrock-agentcore
+              Region: !Ref AWS::Region
+
+Outputs:
+  GatewayTargetId:
+    Value: !GetAtt GatewayTarget.TargetId

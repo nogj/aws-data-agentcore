@@ -1,0 +1,11 @@
+bedrock-agentcore>=1.0.0,<2
+boto3>=1.40.0,<2
+langchain>=1.0.0,<2
+langchain-aws>=1.0.0,<2
+langchain-openai>=1.0.0,<2
+mcp>=1.25.0,<2
+psycopg[binary]>=3.2.0,<4
+pydantic>=2.11.0,<3
+PyYAML>=6.0.2,<7
+SQLAlchemy>=2.0.0,<3
+sqlglot>=27.0.0,<29

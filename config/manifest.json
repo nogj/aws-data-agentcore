@@ -1,0 +1,6 @@
+{
+  "active_version": "1.3.0",
+  "config_key": "config/prod/data-agent-1.3.0.yaml",
+  "artifact_key": "artifacts/prod/data-agent-1.3.0.zip",
+  "artifact_sha256": "7d9c5f1778195731d8a4c13bda852f4565042be11bd88d3f0f135911c9317606"
+}
