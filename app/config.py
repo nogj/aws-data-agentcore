@@ -80,6 +80,7 @@ class DatabaseConfig(BaseModel):
 class AuthorizationConfig(BaseModel):
     required_scope: str = "data:read"
     sql_viewer_scope: str = "data:sql:read"
+    accepted_claims: list[str] = Field(default_factory=lambda: ["scope", "scp", "roles"])
 
 
 class OutputConfig(BaseModel):

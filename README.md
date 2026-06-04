@@ -49,8 +49,8 @@ aws-data-agentcore/
 - Database-specific transaction controls are implemented as explicit adapters.
   PostgreSQL is the first supported adapter.
 - Gateway validates the required JWT scope and a managed request interceptor
-  propagates validated scopes to the Runtime. The Runtime fails closed when the
-  trusted scope header is absent.
+  propagates validated scopes or application roles to the Runtime. The Runtime
+  fails closed when the trusted authorization header is absent.
 - The Gateway target is managed by CloudFormation for rollback, drift
   detection, and clean deletion. Its stack is deployed after the Runtime so the
   MCP endpoint can contain the URL-encoded Runtime ARN required by AgentCore.
@@ -157,9 +157,37 @@ These sections can change without rebuilding the ZIP as long as their expected
 contract remains stable.
 
 Gateway validates inbound JWTs, including the configured `required_scope`.
-The deployed request interceptor derives `x-data-agent-scopes` from the
-validated JWT and replaces any value supplied by a consumer. The Runtime also
-requires the configured scope, so missing propagation denies access.
+The deployed request interceptor derives `x-data-agent-scopes` from configured
+JWT claims and replaces any value supplied by a consumer. By default it accepts
+`scope`, `scp`, and `roles`. The Runtime also requires the configured grant, so
+missing propagation denies access.
+
+## Microsoft Entra ID
+
+Use Entra ID as the OIDC provider for the AgentCore Gateway:
+
+```json
+{
+  "jwt_discovery_url": "https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration",
+  "jwt_allowed_audience": "api://<application-client-id>",
+  "required_scope": "data:read"
+}
+```
+
+Recommended Entra setup:
+
+- Create an App Registration for the API exposed by this agent.
+- Set the Application ID URI used as `jwt_allowed_audience`.
+- For delegated user flows, expose scopes such as `data:read` and
+  `data:sql:read`; Entra emits these in the `scp` claim.
+- For client-credentials flows, define app roles with the same values; Entra
+  emits these in the `roles` claim.
+- Grant and consent the client applications that will call the Gateway.
+
+Gateway `AllowedScopes` validates delegated scopes. Application roles are
+enforced by the managed interceptor and the Runtime using the configured
+`authorization.accepted_claims`. Keep `required_scope` aligned with either the
+delegated scope value or the app role value you assign in Entra.
 
 ## Data Governance
 

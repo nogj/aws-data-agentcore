@@ -14,6 +14,9 @@ Parameters:
   RequiredScope:
     Type: String
     Default: data:read
+  AcceptedClaims:
+    Type: CommaDelimitedList
+    Default: "scope,scp,roles"
   NoncurrentVersionRetentionDays:
     Type: Number
     Default: 90
@@ -171,6 +174,7 @@ Resources:
       Environment:
         Variables:
           REQUIRED_SCOPE: !Ref RequiredScope
+          ACCEPTED_CLAIMS: !Join [",", !Ref AcceptedClaims]
       Code:
         ZipFile: |
           import base64
@@ -178,13 +182,28 @@ Resources:
           import os
 
 
-          def _decode_scopes(authorization):
+          def _claim_values(raw):
+              if raw is None:
+                  return []
+              if isinstance(raw, str):
+                  return raw.split()
+              return list(raw)
+
+
+          def _decode_grants(authorization):
               token = authorization.removeprefix("Bearer ").strip()
               payload = token.split(".")[1]
               payload += "=" * (-len(payload) % 4)
               claims = json.loads(base64.urlsafe_b64decode(payload))
-              raw = claims.get("scope", claims.get("scp", []))
-              return raw.split() if isinstance(raw, str) else list(raw)
+              accepted_claims = [
+                  claim.strip()
+                  for claim in os.environ["ACCEPTED_CLAIMS"].split(",")
+                  if claim.strip()
+              ]
+              grants = []
+              for claim in accepted_claims:
+                  grants.extend(_claim_values(claims.get(claim)))
+              return sorted(set(grants))
 
 
           def handler(event, _context):
@@ -192,12 +211,12 @@ Resources:
               headers = request.get("headers", {})
               normalized_headers = {key.lower(): value for key, value in headers.items()}
               try:
-                  scopes = _decode_scopes(normalized_headers.get("authorization", ""))
+                  grants = _decode_grants(normalized_headers.get("authorization", ""))
               except Exception:
-                  scopes = []
+                  grants = []
 
               required_scope = os.environ["REQUIRED_SCOPE"]
-              if required_scope not in scopes:
+              if required_scope not in grants:
                   return {
                       "interceptorOutputVersion": "1.0",
                       "mcp": {
@@ -218,7 +237,7 @@ Resources:
                   for key, value in headers.items()
                   if key.lower() not in {"authorization", "x-data-agent-scopes"}
               }
-              forwarded["x-data-agent-scopes"] = " ".join(sorted(set(scopes)))
+              forwarded["x-data-agent-scopes"] = " ".join(grants)
               return {
                   "interceptorOutputVersion": "1.0",
                   "mcp": {

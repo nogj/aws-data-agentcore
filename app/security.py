@@ -54,6 +54,6 @@ def normalize_rows(rows: list[dict[str, Any]], config: AppConfig) -> list[dict[s
 
 
 def has_scope(scopes: set[str], required_scope: str) -> bool:
-    """Check an exact authorization scope without applying implicit inheritance."""
+    """Check an exact authorization grant without applying implicit inheritance."""
 
     return required_scope in scopes

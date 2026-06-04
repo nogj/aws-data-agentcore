@@ -35,7 +35,8 @@ aws cloudformation deploy \
     ArtifactBucketName="${BUCKET}" \
     JwtDiscoveryUrl="$(read_param jwt_discovery_url)" \
     JwtAllowedAudience="$(read_param jwt_allowed_audience)" \
-    RequiredScope="$(read_param required_scope)"
+    RequiredScope="$(read_param required_scope)" \
+    AcceptedClaims="$(python3 -c 'import sys,yaml; print(",".join(yaml.safe_load(open(sys.argv[1]))["authorization"]["accepted_claims"]))' "${ROOT}/config/data-agent.yaml")"
 
 RUNTIME_ROLE_ARN="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${BOOTSTRAP_STACK}" --query "Stacks[0].Outputs[?OutputKey=='RuntimeRoleArn'].OutputValue" --output text)"
 GATEWAY_ID="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${BOOTSTRAP_STACK}" --query "Stacks[0].Outputs[?OutputKey=='GatewayIdentifier'].OutputValue" --output text)"

@@ -36,11 +36,20 @@ def main() -> None:
         )
 
     required_scope = parameters.get("required_scope")
-    configured_scope = config.get("authorization", {}).get("required_scope")
+    authorization = config.get("authorization", {})
+    configured_scope = authorization.get("required_scope")
     if required_scope != configured_scope:
         raise SystemExit(
             "Gateway required_scope must match authorization.required_scope in configuration"
         )
+    accepted_claims = set(authorization.get("accepted_claims", []))
+    unsupported_claims = accepted_claims - {"scope", "scp", "roles"}
+    if unsupported_claims:
+        raise SystemExit(
+            f"Unsupported authorization claims: {', '.join(sorted(unsupported_claims))}"
+        )
+    if not accepted_claims:
+        raise SystemExit("At least one authorization claim must be configured")
 
     secret_arn = parameters.get("database_secret_arn", "")
     expected_secret_path = f":secret:/data-agent/{environment}/"

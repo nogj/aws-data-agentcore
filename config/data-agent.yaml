@@ -1,4 +1,4 @@
-version: "1.4.0"
+version: "1.5.0"
 agent:
   name: read-only-data-agent
   environment: prod
@@ -64,6 +64,10 @@ database:
 authorization:
   required_scope: data:read
   sql_viewer_scope: data:sql:read
+  accepted_claims:
+    - scope
+    - scp
+    - roles
 
 data_model:
   description: >

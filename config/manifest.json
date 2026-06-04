@@ -1,6 +1,6 @@
 {
-  "active_version": "1.4.0",
-  "config_key": "config/prod/data-agent-1.4.0.yaml",
-  "artifact_key": "artifacts/prod/data-agent-1.4.0.zip",
-  "artifact_sha256": "dd63bf6fecbf3655fa44dc97f70160591db66e4e5b9c48fad1e20bdd93d75190"
+  "active_version": "1.5.0",
+  "config_key": "config/prod/data-agent-1.5.0.yaml",
+  "artifact_key": "artifacts/prod/data-agent-1.5.0.zip",
+  "artifact_sha256": "c47f2f2794282094454880274299434a5303028c3eee24e57be814618b6c62d5"
 }

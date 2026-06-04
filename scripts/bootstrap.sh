@@ -27,4 +27,5 @@ aws cloudformation deploy \
     ArtifactBucketName="$(read_param artifact_bucket_name)" \
     JwtDiscoveryUrl="$(read_param jwt_discovery_url)" \
     JwtAllowedAudience="$(read_param jwt_allowed_audience)" \
-    RequiredScope="$(read_param required_scope)"
+    RequiredScope="$(read_param required_scope)" \
+    AcceptedClaims="$(python3 -c 'import sys,yaml; print(",".join(yaml.safe_load(open(sys.argv[1]))["authorization"]["accepted_claims"]))' "${ROOT}/config/data-agent.yaml")"
