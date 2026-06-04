@@ -43,6 +43,9 @@ def main() -> None:
             "Gateway required_scope must match authorization.required_scope in configuration"
         )
     accepted_claims = set(authorization.get("accepted_claims", []))
+    mode = authorization.get("mode")
+    if mode not in {"scopes", "claims"}:
+        raise SystemExit("authorization.mode must be either scopes or claims")
     unsupported_claims = accepted_claims - {"scope", "scp", "roles"}
     if unsupported_claims:
         raise SystemExit(
@@ -50,6 +53,15 @@ def main() -> None:
         )
     if not accepted_claims:
         raise SystemExit("At least one authorization claim must be configured")
+    if mode == "scopes" and accepted_claims.isdisjoint({"scope", "scp"}):
+        raise SystemExit(
+            "authorization.mode scopes requires scope or scp in accepted_claims"
+        )
+    if mode == "claims" and "roles" not in accepted_claims:
+        raise SystemExit(
+            "authorization.mode claims is intended for claim validation; include roles "
+            "when using Entra client credentials"
+        )
 
     secret_arn = parameters.get("database_secret_arn", "")
     expected_secret_path = f":secret:/data-agent/{environment}/"

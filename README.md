@@ -162,6 +162,14 @@ JWT claims and replaces any value supplied by a consumer. By default it accepts
 `scope`, `scp`, and `roles`. The Runtime also requires the configured grant, so
 missing propagation denies access.
 
+`authorization.mode` controls where the required grant is enforced first:
+
+- `scopes`: Gateway also sets `AllowedScopes`. Use this for delegated OAuth
+  scopes such as Entra `scp`.
+- `claims`: Gateway validates issuer and audience only; the managed interceptor
+  and Runtime enforce `required_scope` from configured claims such as Entra
+  `roles`. Use this for client-credentials flows with application roles.
+
 ## Microsoft Entra ID
 
 Use Entra ID as the OIDC provider for the AgentCore Gateway:
@@ -188,6 +196,28 @@ Gateway `AllowedScopes` validates delegated scopes. Application roles are
 enforced by the managed interceptor and the Runtime using the configured
 `authorization.accepted_claims`. Keep `required_scope` aligned with either the
 delegated scope value or the app role value you assign in Entra.
+
+For delegated user flow, keep:
+
+```yaml
+authorization:
+  mode: scopes
+  required_scope: data:read
+  accepted_claims: [scp, scope]
+```
+
+For client credentials with app roles, use:
+
+```yaml
+authorization:
+  mode: claims
+  required_scope: data:read
+  accepted_claims: [roles]
+```
+
+Changing `authorization.mode` or `accepted_claims` affects the Gateway
+interceptor environment and requires redeploying the bootstrap stack, not only
+publishing a new S3 configuration file.
 
 ## Data Governance
 

@@ -6,6 +6,7 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from app.authorization import claim_values
 from app.audit import emit
 from app.config import load_config
 from app.database import execute_read_only_sql
@@ -26,15 +27,15 @@ mcp = FastMCP(
 )
 
 
-def _scopes_from_context(ctx: Context | None) -> set[str]:
-    """Read trusted scopes injected by a Gateway interceptor, when configured."""
+def _grants_from_context(ctx: Context | None) -> set[str]:
+    """Read trusted authorization grants injected by the Gateway interceptor."""
 
     if ctx is None:
         return set()
     try:
         request = ctx.request_context.request
         raw = request.headers.get("x-data-agent-scopes", "")
-        return set(raw.split())
+        return set(claim_values(raw))
     except AttributeError:
         return set()
 
@@ -58,7 +59,7 @@ async def ask_database(
     started = time.perf_counter()
     trace_id = str(uuid.uuid4())
     config = load_config()
-    scopes = _scopes_from_context(ctx)
+    grants = _grants_from_context(ctx)
 
     def response(**kwargs: Any) -> dict[str, Any]:
         # Compute elapsed time at the last possible moment for every response path.
@@ -73,7 +74,7 @@ async def ask_database(
             context=context,
         )
         # Authorization must fail closed if the trusted Gateway scope header is absent.
-        if not has_scope(scopes, config.authorization.required_scope):
+        if not has_scope(grants, config.authorization.required_scope):
             raise PermissionError("missing_required_scope")
         validate_question(request.question, config)
         validate_context(request.context, config)
@@ -98,7 +99,7 @@ async def ask_database(
             )
         can_show_sql = request.include_sql and (
             config.query.allow_sql_by_default
-            or has_scope(scopes, config.authorization.sql_viewer_scope)
+            or has_scope(grants, config.authorization.sql_viewer_scope)
         )
         warnings = [*candidate.assumptions, *summary.warnings]
         emit(

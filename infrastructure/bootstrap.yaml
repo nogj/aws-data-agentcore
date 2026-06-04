@@ -14,6 +14,10 @@ Parameters:
   RequiredScope:
     Type: String
     Default: data:read
+  AuthorizationMode:
+    Type: String
+    Default: scopes
+    AllowedValues: [scopes, claims]
   AcceptedClaims:
     Type: CommaDelimitedList
     Default: "scope,scp,roles"
@@ -25,6 +29,9 @@ Parameters:
     Type: Number
     Default: 30
     MinValue: 1
+
+Conditions:
+  UseGatewayAllowedScopes: !Equals [!Ref AuthorizationMode, scopes]
 
 Resources:
   ArtifactBucket:
@@ -272,7 +279,10 @@ Resources:
           AllowedAudience:
             - !Ref JwtAllowedAudience
           AllowedScopes:
-            - !Ref RequiredScope
+            !If
+              - UseGatewayAllowedScopes
+              - [!Ref RequiredScope]
+              - !Ref AWS::NoValue
       InterceptorConfigurations:
         - InterceptionPoints:
             - REQUEST
