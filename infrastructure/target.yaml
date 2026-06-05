@@ -14,7 +14,7 @@ Parameters:
     Type: String
   AllowedRequestHeaders:
     Type: CommaDelimitedList
-    Default: "x-data-agent-grants,x-data-agent-identity"
+    Default: "x-data-agent-grants,x-data-agent-identity,x-data-agent-issued-at,x-data-agent-signature"
 
 Resources:
   GatewayTarget:

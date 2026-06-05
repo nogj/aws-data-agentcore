@@ -1,5 +1,8 @@
 import base64
+import hashlib
+import hmac
 import json
+import time
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -84,3 +87,40 @@ def identity_from_header(raw: str | None) -> CallerIdentity:
     return CallerIdentity(
         claims={str(key): str(value) for key, value in claims.items() if value is not None}
     )
+
+
+def gateway_header_signature(
+    secret: str, grants: str, identity: str, issued_at: str
+) -> str:
+    """Sign the trusted Gateway headers propagated to the Runtime."""
+
+    payload = "\n".join([grants, identity, issued_at]).encode()
+    digest = hmac.new(secret.encode(), payload, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
+
+
+def verify_gateway_header_signature(
+    secret: str,
+    grants: str,
+    identity: str,
+    issued_at: str,
+    signature: str,
+    *,
+    ttl_seconds: int,
+    now: float | None = None,
+) -> bool:
+    """Verify trusted Gateway headers before using them for authorization."""
+
+    if not all([secret, issued_at, signature]):
+        return False
+    try:
+        issued_at_seconds = int(issued_at)
+    except ValueError:
+        return False
+    current = int(now if now is not None else time.time())
+    if issued_at_seconds > current + 30:
+        return False
+    if current - issued_at_seconds > ttl_seconds:
+        return False
+    expected = gateway_header_signature(secret, grants, identity, issued_at)
+    return hmac.compare_digest(expected, signature)

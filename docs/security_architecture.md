@@ -93,7 +93,8 @@ The hub design has shared boundaries plus module-local boundaries:
 1. **Gateway boundary**: authenticates inbound callers and performs first-pass
    authorization using OIDC/JWT validation. Gateway is shared by modules.
 2. **Interceptor boundary**: derives trusted grants and bounded caller identity
-   from validated tokens, then strips caller-forged internal headers.
+   from validated tokens, strips caller-forged internal headers, and signs the
+   internal headers consumed by the Runtime.
 3. **Target boundary**: each target enforces its own capability policy from
    trusted headers and applies module-specific input/output controls.
 4. **Resource boundary**: each downstream resource enforces its own final
@@ -133,7 +134,7 @@ Role and credential ownership summary:
 - **Gateway role**: AWS service role used by Gateway to invoke targets and the
   interceptor.
 - **Runtime role**: AWS service role used by AgentCore Runtime to read config,
-  secrets, invoke models, and log.
+  secrets, verify Gateway-signed headers, invoke models, and log.
 - **Interceptor role**: Lambda execution role used only for request
   transformation and logging.
 - **Database role**: PostgreSQL read-only technical role used by the database

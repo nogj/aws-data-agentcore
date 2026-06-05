@@ -122,6 +122,25 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: ReadHeaderSigningSecret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref HeaderSigningSecret
+
+  HeaderSigningSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "/data-agent/${Environment}/gateway-header-signing"
+      Description: Shared secret used by the Gateway interceptor to sign Runtime authorization headers.
+      GenerateSecretString:
+        SecretStringTemplate: "{}"
+        GenerateStringKey: secret
+        PasswordLength: 64
+        ExcludePunctuation: true
 
   ScopePropagationFunction:
     Type: AWS::Lambda::Function
@@ -137,11 +156,19 @@ Resources:
           REQUIRED_SCOPE: !Ref RequiredScope
           ACCEPTED_CLAIMS: !Join [",", !Ref AcceptedClaims]
           IDENTITY_CLAIMS: !Join [",", !Ref IdentityClaims]
+          HEADER_SIGNING_SECRET_ARN: !Ref HeaderSigningSecret
       Code:
         ZipFile: |
           import base64
+          import boto3
+          import hashlib
+          import hmac
           import json
           import os
+          import time
+
+
+          _SECRET_CACHE = None
 
 
           def _claim_values(raw):
@@ -149,7 +176,7 @@ Resources:
                   return []
               if isinstance(raw, str):
                   return raw.split()
-              return list(raw)
+              return [str(item) for item in raw]
 
 
           def _decode_claims(authorization):
@@ -184,6 +211,22 @@ Resources:
               }
               payload = json.dumps(selected, separators=(",", ":"), sort_keys=True).encode()
               return base64.urlsafe_b64encode(payload).decode().rstrip("=")
+
+
+          def _signing_secret():
+              global _SECRET_CACHE
+              if _SECRET_CACHE is None:
+                  value = boto3.client("secretsmanager").get_secret_value(
+                      SecretId=os.environ["HEADER_SIGNING_SECRET_ARN"]
+                  )
+                  _SECRET_CACHE = json.loads(value["SecretString"])["secret"]
+              return _SECRET_CACHE
+
+
+          def _signature(secret, grants, identity, issued_at):
+              payload = "\n".join([grants, identity, issued_at]).encode()
+              digest = hmac.new(secret.encode(), payload, hashlib.sha256).digest()
+              return base64.urlsafe_b64encode(digest).decode().rstrip("=")
 
 
           def handler(event, _context):
@@ -223,10 +266,18 @@ Resources:
                       "authorization",
                       "x-data-agent-grants",
                       "x-data-agent-identity",
+                      "x-data-agent-issued-at",
+                      "x-data-agent-signature",
                   }
               }
-              forwarded["x-data-agent-grants"] = " ".join(grants)
+              grant_header = " ".join(grants)
+              issued_at = str(int(time.time()))
+              forwarded["x-data-agent-grants"] = grant_header
               forwarded["x-data-agent-identity"] = identity
+              forwarded["x-data-agent-issued-at"] = issued_at
+              forwarded["x-data-agent-signature"] = _signature(
+                  _signing_secret(), grant_header, identity, issued_at
+              )
               return {
                   "interceptorOutputVersion": "1.0",
                   "mcp": {
@@ -285,3 +336,5 @@ Outputs:
     Value: !Ref Gateway
   GatewayUrl:
     Value: !GetAtt Gateway.GatewayUrl
+  HeaderSigningSecretArn:
+    Value: !Ref HeaderSigningSecret

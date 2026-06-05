@@ -63,6 +63,7 @@ aws cloudformation deploy \
     IdentityClaims="$(python3 -c 'import sys,yaml; print(",".join(yaml.safe_load(open(sys.argv[1]))["authorization"].get("identity_claims", [])))' "${CONFIG_FILE}")"
 
 GATEWAY_ID="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${BOOTSTRAP_STACK}" --query "Stacks[0].Outputs[?OutputKey=='GatewayIdentifier'].OutputValue" --output text)"
+HEADER_SIGNING_SECRET_ARN="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${BOOTSTRAP_STACK}" --query "Stacks[0].Outputs[?OutputKey=='HeaderSigningSecretArn'].OutputValue" --output text)"
 
 aws cloudformation deploy \
   --region "${REGION}" \
@@ -76,6 +77,7 @@ aws cloudformation deploy \
     ConfigKey="${CONFIG_KEY}" \
     RuntimeRoleName="${RUNTIME_ROLE_NAME}" \
     DatabaseSecretArn="$(read_agent_param database_secret_arn)" \
+    HeaderSigningSecretArn="${HEADER_SIGNING_SECRET_ARN}" \
     OpenAISecretArn="$(read_optional_agent_param openai_secret_arn)" \
     PrivateSubnetIds="$(read_agent_param private_subnet_ids)" \
     RuntimeSecurityGroupIds="$(read_agent_param runtime_security_group_ids)" \

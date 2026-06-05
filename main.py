@@ -1,12 +1,18 @@
 import asyncio
 import logging
+import os
 import time
 import uuid
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from app.authorization import CallerIdentity, claim_values, identity_from_header
+from app.authorization import (
+    CallerIdentity,
+    claim_values,
+    identity_from_header,
+    verify_gateway_header_signature,
+)
 from app.audit import emit
 from app.capabilities.database.database import execute_read_only_sql
 from app.capabilities.database.llm import generate_sql, summarize_results
@@ -18,7 +24,7 @@ from app.capabilities.database.security import (
     validate_question,
 )
 from app.capabilities.database.sql_validator import validate_sql
-from app.config import load_config
+from app.config import AppConfig, load_config, load_secret
 
 
 logging.basicConfig(level=logging.INFO)
@@ -32,29 +38,53 @@ mcp = FastMCP(
 )
 
 
-def _grants_from_context(ctx: Context | None) -> set[str]:
-    """Read trusted authorization grants injected by the Gateway interceptor."""
+def _gateway_header_secret() -> str:
+    """Load the shared secret used to authenticate Gateway-propagated headers."""
+
+    secret = load_secret(os.environ["GATEWAY_HEADER_SIGNING_SECRET_ARN"])
+    return str(secret["secret"])
+
+
+def _gateway_signature_ttl_seconds() -> int:
+    """Return the accepted age for signed Gateway headers."""
+
+    return int(os.environ.get("GATEWAY_HEADER_SIGNATURE_TTL_SECONDS", "300"))
+
+
+def _trusted_gateway_context(
+    ctx: Context | None, signing_secret: str
+) -> tuple[set[str], CallerIdentity]:
+    """Read trusted authorization grants and identity from signed Gateway headers."""
 
     if ctx is None:
-        return set()
+        raise PermissionError("missing_gateway_context")
     try:
         request = ctx.request_context.request
-        raw = request.headers.get("x-data-agent-grants", "")
-        return set(claim_values(raw))
+        grants = request.headers.get("x-data-agent-grants", "")
+        identity = request.headers.get("x-data-agent-identity", "")
+        issued_at = request.headers.get("x-data-agent-issued-at", "")
+        signature = request.headers.get("x-data-agent-signature", "")
     except AttributeError:
-        return set()
+        raise PermissionError("missing_gateway_context") from None
+    if not verify_gateway_header_signature(
+        signing_secret,
+        grants,
+        identity,
+        issued_at,
+        signature,
+        ttl_seconds=_gateway_signature_ttl_seconds(),
+    ):
+        raise PermissionError("invalid_gateway_signature")
+    return set(claim_values(grants)), identity_from_header(identity)
 
 
-def _identity_from_context(ctx: Context | None) -> CallerIdentity:
-    """Read trusted caller identity claims injected by the Gateway interceptor."""
+def _summary_input(
+    rows: list[dict[str, Any]], source_row_count: int, config: AppConfig
+) -> tuple[list[dict[str, Any]], bool]:
+    """Return the rows visible to the summarizer and whether anything was omitted."""
 
-    if ctx is None:
-        return CallerIdentity()
-    try:
-        request = ctx.request_context.request
-        return identity_from_header(request.headers.get("x-data-agent-identity"))
-    except AttributeError:
-        return CallerIdentity()
+    summary_rows = rows[: config.output.max_summary_rows]
+    return summary_rows, source_row_count > len(summary_rows)
 
 
 @mcp.tool(
@@ -77,8 +107,6 @@ async def ask_database(
     trace_id = str(uuid.uuid4())
     config = load_config()
     capability = config.capability("ask_database")
-    grants = _grants_from_context(ctx)
-    caller = _identity_from_context(ctx)
 
     def response(**kwargs: Any) -> dict[str, Any]:
         # Compute elapsed time at the last possible moment for every response path.
@@ -92,6 +120,7 @@ async def ask_database(
             include_sql=include_sql,
             context=context,
         )
+        grants, caller = _trusted_gateway_context(ctx, _gateway_header_secret())
         # Authorization must fail closed if the trusted Gateway scope header is absent.
         if not all(has_scope(grants, grant) for grant in capability.required_grants):
             raise PermissionError("missing_required_scope")
@@ -109,12 +138,15 @@ async def ask_database(
             validated = validate_sql(candidate.sql, config, bounded_rows)
             result = await execute_read_only_sql(validated.sql, config)
             rows = normalize_rows(result.rows, config)
+            summary_rows, summary_truncated = _summary_input(
+                rows, len(result.rows), config
+            )
             summary = await summarize_results(
                 config,
                 request.question,
-                rows[: config.output.max_summary_rows],
+                summary_rows,
                 candidate.assumptions,
-                truncated=len(result.rows) > len(rows),
+                truncated=summary_truncated,
             )
         can_show_sql = request.include_sql and (
             config.query.allow_sql_by_default

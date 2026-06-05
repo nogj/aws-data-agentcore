@@ -2,6 +2,7 @@ from scripts.validate_parameters import (
     _contains_placeholder,
     _deployment_parameters,
     _placeholder_keys,
+    _validate_allowed_request_headers,
     _validate_authorization_config,
     _validate_target_credential_config,
 )
@@ -73,6 +74,28 @@ def test_accepts_gateway_iam_target_config() -> None:
     _validate_target_credential_config(
         {
             "target_credential_provider_type": "GATEWAY_IAM_ROLE",
+        }
+    )
+
+
+def test_rejects_allowed_headers_without_signature_headers() -> None:
+    try:
+        _validate_allowed_request_headers(
+            {"allowed_request_headers": "x-data-agent-grants,x-data-agent-identity"}
+        )
+    except SystemExit as exc:
+        assert "x-data-agent-signature" in str(exc)
+        return
+    raise AssertionError("Expected SystemExit")
+
+
+def test_accepts_allowed_headers_with_signature_headers() -> None:
+    _validate_allowed_request_headers(
+        {
+            "allowed_request_headers": (
+                "x-data-agent-grants,x-data-agent-identity,"
+                "x-data-agent-issued-at,x-data-agent-signature"
+            )
         }
     )
 

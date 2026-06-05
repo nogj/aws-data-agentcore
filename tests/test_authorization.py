@@ -1,9 +1,11 @@
 from app.authorization import (
     CallerIdentity,
     encode_identity,
+    gateway_header_signature,
     grants_from_claims,
     identity_from_claims,
     identity_from_header,
+    verify_gateway_header_signature,
 )
 
 
@@ -50,3 +52,45 @@ def test_round_trips_identity_header() -> None:
         "caller_subject": "user-1",
         "caller_azp": "client-1",
     }
+
+
+def test_verifies_signed_gateway_headers() -> None:
+    signature = gateway_header_signature("secret", "data:read", "identity", "1000")
+
+    assert verify_gateway_header_signature(
+        "secret",
+        "data:read",
+        "identity",
+        "1000",
+        signature,
+        ttl_seconds=300,
+        now=1100,
+    )
+
+
+def test_rejects_tampered_gateway_headers() -> None:
+    signature = gateway_header_signature("secret", "data:read", "identity", "1000")
+
+    assert not verify_gateway_header_signature(
+        "secret",
+        "data:read data:sql:read",
+        "identity",
+        "1000",
+        signature,
+        ttl_seconds=300,
+        now=1100,
+    )
+
+
+def test_rejects_stale_gateway_headers() -> None:
+    signature = gateway_header_signature("secret", "data:read", "identity", "1000")
+
+    assert not verify_gateway_header_signature(
+        "secret",
+        "data:read",
+        "identity",
+        "1000",
+        signature,
+        ttl_seconds=300,
+        now=1401,
+    )

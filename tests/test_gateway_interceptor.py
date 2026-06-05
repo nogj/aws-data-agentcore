@@ -44,9 +44,11 @@ def _jwt(claims: dict[str, object]) -> str:
 
 def test_inline_interceptor_ignores_roles_in_scopes_mode(monkeypatch) -> None:
     handler = _load_interceptor_handler()
+    handler.__globals__["_SECRET_CACHE"] = "test-secret"
     monkeypatch.setenv("REQUIRED_SCOPE", "data:read")
     monkeypatch.setenv("ACCEPTED_CLAIMS", "scope,scp")
     monkeypatch.setenv("IDENTITY_CLAIMS", "sub,preferred_username")
+    monkeypatch.setenv("HEADER_SIGNING_SECRET_ARN", "secret-arn")
 
     event = {
         "mcp": {
@@ -62,6 +64,7 @@ def test_inline_interceptor_ignores_roles_in_scopes_mode(monkeypatch) -> None:
                         }
                     ),
                     "x-data-agent-grants": "data:sql:read",
+                    "x-data-agent-signature": "forged",
                 },
                 "body": {"id": "request-1"},
             }
@@ -72,5 +75,7 @@ def test_inline_interceptor_ignores_roles_in_scopes_mode(monkeypatch) -> None:
     headers = response["mcp"]["transformedGatewayRequest"]["headers"]
 
     assert headers["x-data-agent-grants"] == "data:read"
+    assert headers["x-data-agent-signature"] != "forged"
+    assert headers["x-data-agent-issued-at"]
     assert "authorization" not in {key.lower() for key in headers}
     assert "data:sql:read" not in headers["x-data-agent-grants"]

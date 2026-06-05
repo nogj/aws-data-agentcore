@@ -37,6 +37,7 @@ def _placeholder_keys(parameters: dict[str, Any], instance: str) -> list[str]:
         "oauth_grant_type",
         "oauth_provider_arn",
         "oauth_scopes",
+        "allowed_request_headers",
         "private_subnet_ids",
         "runtime_security_group_ids",
         "target_credential_provider_type",
@@ -107,6 +108,31 @@ def _validate_target_credential_config(parameters: dict[str, Any]) -> None:
         )
 
 
+def _validate_allowed_request_headers(parameters: dict[str, Any]) -> None:
+    """Ensure the GatewayTarget forwards every signed header the Runtime requires."""
+
+    configured = parameters.get("allowed_request_headers")
+    if not configured:
+        return
+    headers = {
+        header.strip().lower()
+        for header in str(configured).split(",")
+        if header.strip()
+    }
+    required = {
+        "x-data-agent-grants",
+        "x-data-agent-identity",
+        "x-data-agent-issued-at",
+        "x-data-agent-signature",
+    }
+    missing = sorted(required - headers)
+    if missing:
+        raise SystemExit(
+            "allowed_request_headers must include signed Gateway headers: "
+            + ", ".join(missing)
+        )
+
+
 def main() -> None:
     path = Path(sys.argv[1])
     environment = sys.argv[2]
@@ -124,6 +150,7 @@ def main() -> None:
             f"Deployment parameters still contain REPLACE markers: {', '.join(invalid)}"
         )
     _validate_target_credential_config(parameters)
+    _validate_allowed_request_headers(parameters)
 
     required_scope = parameters.get("required_scope")
     authorization = config.get("authorization", {})

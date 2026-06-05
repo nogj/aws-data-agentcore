@@ -231,6 +231,7 @@ The runtime receives only bootstrap references:
 - `CONFIG_BUCKET`
 - `CONFIG_KEY`
 - `DATABASE_SECRET_ARN`
+- `GATEWAY_HEADER_SIGNING_SECRET_ARN`
 - `OPENAI_SECRET_ARN` when OpenAI is enabled
 - `APP_ENV`
 - `AWS_REGION`
@@ -265,10 +266,12 @@ Gateway validates inbound JWTs, including the configured `required_scope`.
 The deployed request interceptor derives the `x-data-agent-grants` header from
 configured JWT claims and replaces any value supplied by a consumer. It also
 emits a bounded `x-data-agent-identity` header containing only the configured
-identity claims. By default, in `scopes` mode, it accepts only `scope` and `scp`
-as grants and propagates `sub`, `oid`, `preferred_username`, `appid`, `azp`, and
-`tid` for audit. `roles` is reserved for `claims` mode. The Runtime also
-requires the configured grant, so missing propagation denies access.
+identity claims. The interceptor signs those internal headers with a shared
+Secrets Manager secret and the Runtime rejects unsigned, stale, or tampered
+headers before evaluating grants. By default, in `scopes` mode, it accepts only
+`scope` and `scp` as grants and propagates `sub`, `oid`, `preferred_username`,
+`appid`, `azp`, and `tid` for audit. `roles` is reserved for `claims` mode. The
+Runtime also requires the configured grant, so missing propagation denies access.
 
 `authorization.mode` controls where the required grant is enforced first:
 

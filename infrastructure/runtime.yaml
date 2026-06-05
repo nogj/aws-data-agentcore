@@ -18,6 +18,8 @@ Parameters:
     Description: Optional name for the per-runtime IAM role created by this stack.
   DatabaseSecretArn:
     Type: String
+  HeaderSigningSecretArn:
+    Type: String
   OpenAISecretArn:
     Type: String
     Default: ""
@@ -72,6 +74,7 @@ Resources:
                 Action: secretsmanager:GetSecretValue
                 Resource:
                   - !Ref DatabaseSecretArn
+                  - !Ref HeaderSigningSecretArn
                   - !If
                     - UseOpenAISecret
                     - !Ref OpenAISecretArn
@@ -117,6 +120,8 @@ Resources:
         RequestHeaderAllowlist:
           - x-data-agent-grants
           - x-data-agent-identity
+          - x-data-agent-issued-at
+          - x-data-agent-signature
       NetworkConfiguration:
         NetworkMode: VPC
         NetworkModeConfig:
@@ -128,6 +133,8 @@ Resources:
         CONFIG_BUCKET: !Ref ArtifactBucketName
         CONFIG_KEY: !Ref ConfigKey
         DATABASE_SECRET_ARN: !Ref DatabaseSecretArn
+        GATEWAY_HEADER_SIGNING_SECRET_ARN: !Ref HeaderSigningSecretArn
+        GATEWAY_HEADER_SIGNATURE_TTL_SECONDS: "300"
         OPENAI_SECRET_ARN: !Ref OpenAISecretArn
         AWS_REGION: !Ref AWS::Region
       LifecycleConfiguration:
