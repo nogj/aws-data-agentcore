@@ -3,6 +3,7 @@ from scripts.validate_parameters import (
     _deployment_parameters,
     _placeholder_keys,
     _validate_authorization_config,
+    _validate_target_credential_config,
 )
 
 
@@ -36,6 +37,28 @@ def test_placeholder_check_ignores_other_agent_overrides() -> None:
     }
 
     assert _placeholder_keys(parameters, "cmdb") == []
+
+
+def test_oauth_target_requires_provider_arn() -> None:
+    try:
+        _validate_target_credential_config(
+            {"target_credential_provider_type": "OAUTH", "oauth_scopes": "docs.read"}
+        )
+    except SystemExit as exc:
+        assert "oauth_provider_arn is required" in str(exc)
+        return
+    raise AssertionError("Expected SystemExit")
+
+
+def test_accepts_oauth_target_config() -> None:
+    _validate_target_credential_config(
+        {
+            "target_credential_provider_type": "OAUTH",
+            "oauth_provider_arn": "arn:aws:bedrock-agentcore:eu-west-1:111122223333:token-vault/default/oauth2credentialprovider/docs",
+            "oauth_scopes": "docs.read,offline_access",
+            "oauth_grant_type": "AUTHORIZATION_CODE",
+        }
+    )
 
 
 def test_scopes_mode_rejects_roles_claim() -> None:

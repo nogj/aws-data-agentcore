@@ -33,6 +33,15 @@ read_optional_agent_param() {
 
 REGION="$(read_param region)"
 BUCKET="$(read_param artifact_bucket_name)"
+ALLOWED_REQUEST_HEADERS="${ALLOWED_REQUEST_HEADERS:-$(read_optional_agent_param allowed_request_headers)}"
+ALLOWED_REQUEST_HEADERS="${ALLOWED_REQUEST_HEADERS:-x-data-agent-grants,x-data-agent-identity}"
+TARGET_CREDENTIAL_PROVIDER_TYPE="${TARGET_CREDENTIAL_PROVIDER_TYPE:-$(read_optional_agent_param target_credential_provider_type)}"
+TARGET_CREDENTIAL_PROVIDER_TYPE="${TARGET_CREDENTIAL_PROVIDER_TYPE:-GATEWAY_IAM_ROLE}"
+OAUTH_PROVIDER_ARN="${OAUTH_PROVIDER_ARN:-$(read_optional_agent_param oauth_provider_arn)}"
+OAUTH_SCOPES="${OAUTH_SCOPES:-$(read_optional_agent_param oauth_scopes)}"
+OAUTH_GRANT_TYPE="${OAUTH_GRANT_TYPE:-$(read_optional_agent_param oauth_grant_type)}"
+OAUTH_GRANT_TYPE="${OAUTH_GRANT_TYPE:-AUTHORIZATION_CODE}"
+OAUTH_DEFAULT_RETURN_URL="${OAUTH_DEFAULT_RETURN_URL:-$(read_optional_agent_param oauth_default_return_url)}"
 BOOTSTRAP_STACK="data-agent-bootstrap-${ENVIRONMENT}"
 if [[ "${DATA_AGENT_INSTANCE}" == "data-agent" ]]; then
   STACK_SUFFIX=""
@@ -91,6 +100,12 @@ aws cloudformation deploy \
     GatewayIdentifier="${GATEWAY_ID}" \
     TargetName="${TARGET_NAME}" \
     TargetDescription="${TARGET_DESCRIPTION}" \
-    RuntimeEndpointUrl="${RUNTIME_ENDPOINT_URL}"
+    RuntimeEndpointUrl="${RUNTIME_ENDPOINT_URL}" \
+    AllowedRequestHeaders="${ALLOWED_REQUEST_HEADERS}" \
+    CredentialProviderType="${TARGET_CREDENTIAL_PROVIDER_TYPE}" \
+    OAuthProviderArn="${OAUTH_PROVIDER_ARN}" \
+    OAuthScopes="${OAUTH_SCOPES}" \
+    OAuthGrantType="${OAUTH_GRANT_TYPE}" \
+    OAuthDefaultReturnUrl="${OAUTH_DEFAULT_RETURN_URL}"
 
 echo "Deployed ${DATA_AGENT_INSTANCE} runtime ${RUNTIME_ARN}"

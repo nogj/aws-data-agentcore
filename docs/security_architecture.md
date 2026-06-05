@@ -559,6 +559,28 @@ capabilities:
 
 Targets using `on_behalf_of_user` should receive only the token or context
 required for token exchange and should avoid broad propagation of inbound JWTs.
+In this repository, `infrastructure/target.yaml` supports the default
+`GATEWAY_IAM_ROLE` credential provider and an `OAUTH` credential provider for
+future OBO targets. OBO targets must be backed by an AgentCore OAuth credential
+provider ARN, requested scopes, and a capability declaration with
+`identity_mode: on_behalf_of_user` and `downstream_audience`.
+Multiple OAuth scopes must be passed as a comma-separated parameter value.
+
+Example target parameters for an OBO module:
+
+```json
+{
+  "agents": {
+    "user-documents": {
+      "target_credential_provider_type": "OAUTH",
+      "oauth_provider_arn": "arn:aws:bedrock-agentcore:eu-west-1:111122223333:token-vault/default/oauth2credentialprovider/entra-docs-obo",
+      "oauth_scopes": "https://graph.microsoft.com/.default",
+      "oauth_grant_type": "AUTHORIZATION_CODE",
+      "allowed_request_headers": "x-data-agent-grants,x-data-agent-identity"
+    }
+  }
+}
+```
 
 Knowledge-base targets should define retrieval filters, source allowlists,
 document sensitivity labels, citation behavior, and answer redaction controls.

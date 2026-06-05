@@ -33,8 +33,13 @@ def _placeholder_keys(parameters: dict[str, Any], instance: str) -> list[str]:
     overridable = {
         "database_secret_arn",
         "openai_secret_arn",
+        "oauth_default_return_url",
+        "oauth_grant_type",
+        "oauth_provider_arn",
+        "oauth_scopes",
         "private_subnet_ids",
         "runtime_security_group_ids",
+        "target_credential_provider_type",
     }
     visible_parameters = _deployment_parameters(parameters, instance)
     invalid: list[str] = []
@@ -79,6 +84,26 @@ def _validate_authorization_config(authorization: dict[str, Any]) -> None:
         )
 
 
+def _validate_target_credential_config(parameters: dict[str, Any]) -> None:
+    """Validate outbound credential provider parameters for a Gateway target."""
+
+    provider_type = parameters.get("target_credential_provider_type", "GATEWAY_IAM_ROLE")
+    if provider_type not in {"GATEWAY_IAM_ROLE", "OAUTH"}:
+        raise SystemExit(
+            "target_credential_provider_type must be GATEWAY_IAM_ROLE or OAUTH"
+        )
+    if provider_type == "OAUTH":
+        if not parameters.get("oauth_provider_arn"):
+            raise SystemExit("oauth_provider_arn is required for OAUTH targets")
+        if not parameters.get("oauth_scopes"):
+            raise SystemExit("oauth_scopes is required for OAUTH targets")
+        grant_type = parameters.get("oauth_grant_type", "AUTHORIZATION_CODE")
+        if grant_type not in {"AUTHORIZATION_CODE", "CLIENT_CREDENTIALS"}:
+            raise SystemExit(
+                "oauth_grant_type must be AUTHORIZATION_CODE or CLIENT_CREDENTIALS"
+            )
+
+
 def main() -> None:
     path = Path(sys.argv[1])
     environment = sys.argv[2]
@@ -95,6 +120,7 @@ def main() -> None:
         raise SystemExit(
             f"Deployment parameters still contain REPLACE markers: {', '.join(invalid)}"
         )
+    _validate_target_credential_config(parameters)
 
     required_scope = parameters.get("required_scope")
     authorization = config.get("authorization", {})
@@ -121,6 +147,18 @@ def main() -> None:
             f"{', '.join(sorted(unsupported_identity_claims))}"
         )
     capabilities = config.get("capabilities", [])
+    for capability in capabilities:
+        identity_mode = capability.get("identity_mode")
+        if identity_mode not in {"service", "on_behalf_of_user"}:
+            raise SystemExit(
+                "capability identity_mode must be service or on_behalf_of_user"
+            )
+        if identity_mode == "on_behalf_of_user" and not capability.get(
+            "downstream_audience"
+        ):
+            raise SystemExit(
+                "on_behalf_of_user capabilities must declare downstream_audience"
+            )
     ask_database = next(
         (
             capability
@@ -134,17 +172,6 @@ def main() -> None:
         if required_scope not in required_grants:
             raise SystemExit(
                 "ask_database.required_grants must include authorization.required_scope"
-            )
-        identity_mode = ask_database.get("identity_mode")
-        if identity_mode not in {"service", "on_behalf_of_user"}:
-            raise SystemExit(
-                "capability identity_mode must be service or on_behalf_of_user"
-            )
-        if identity_mode == "on_behalf_of_user" and not ask_database.get(
-            "downstream_audience"
-        ):
-            raise SystemExit(
-                "on_behalf_of_user capabilities must declare downstream_audience"
             )
 
     secret_arn = parameters.get("database_secret_arn", "")

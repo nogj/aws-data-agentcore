@@ -372,9 +372,43 @@ allowlists `x-data-agent-grants` and `x-data-agent-identity`; future OBO targets
 should have their own GatewayTarget metadata and credential-provider
 configuration rather than broadening this target's contract.
 `infrastructure/target.yaml` is parameterized with
-`TargetName`, `TargetDescription`, and `AllowedRequestHeaders` so the same
-template can be reused for additional Gateway targets with narrower header
-contracts.
+`TargetName`, `TargetDescription`, `AllowedRequestHeaders`, and outbound
+credential-provider settings so the same template can be reused for additional
+Gateway targets with narrower header contracts.
+
+For OBO targets, keep the capability declaration and the target credential
+provider aligned:
+
+```yaml
+capabilities:
+  - name: search_user_documents
+    target: user-documents
+    identity_mode: on_behalf_of_user
+    required_grants: [docs:read]
+    downstream_audience: api://sharepoint-or-internal-docs
+    credential_provider_name: entra-docs-obo
+```
+
+```json
+{
+  "agents": {
+    "user-documents": {
+      "target_credential_provider_type": "OAUTH",
+      "oauth_provider_arn": "arn:aws:bedrock-agentcore:eu-west-1:111122223333:token-vault/default/oauth2credentialprovider/entra-docs-obo",
+      "oauth_scopes": "https://graph.microsoft.com/.default",
+      "oauth_grant_type": "AUTHORIZATION_CODE",
+      "allowed_request_headers": "x-data-agent-grants,x-data-agent-identity"
+    }
+  }
+}
+```
+
+`GATEWAY_IAM_ROLE` remains the default for AgentCore-hosted MCP Runtime
+targets, including the database agent. Use `OAUTH` only for targets that need
+AgentCore Identity/outbound authorization or an equivalent approved OBO
+credential provider. When a target needs more than one OAuth scope, provide
+`oauth_scopes` as a comma-separated value because the CloudFormation parameter
+is a `CommaDelimitedList`.
 
 ## Data Governance
 
