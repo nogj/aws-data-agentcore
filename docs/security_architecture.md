@@ -137,6 +137,45 @@ Role and credential ownership summary:
 - **Database role**: PostgreSQL read-only technical role used by the database
   agent; it is not the end user's identity.
 
+## Runtime Isolation Model
+
+Multiple database agents share the same Gateway hub and, by default, the same
+environment-level Runtime IAM role. Each database agent instance is isolated by
+its own AgentCore Runtime stack, GatewayTarget, S3 configuration key, Secrets
+Manager database secret, authorized data model, prompts, SQL rules, network
+settings, and PostgreSQL read-only role.
+
+Per-instance isolation boundaries:
+
+- **Runtime stack**: `data-agent-runtime-<environment>-<instance>` for
+  non-default instances.
+- **GatewayTarget**: one target name per database agent instance.
+- **Configuration**: each instance receives its own `CONFIG_KEY`, including
+  prompts, glossary, synonyms, data model, query limits, and capability grants.
+- **Database secret**: each instance receives its own `DATABASE_SECRET_ARN`.
+- **Database role**: each instance should use a dedicated read-only database
+  role whenever the read perimeter differs.
+- **Network posture**: subnet and security group values can be overridden per
+  instance through `agents.<instance>` parameters.
+
+Shared boundaries:
+
+- **Gateway**: one public MCP facade per environment.
+- **JWT authorizer and request interceptor**: shared inbound authentication and
+  grant derivation.
+- **Gateway IAM role**: shared role used by Gateway to invoke Runtime targets.
+- **Runtime IAM role**: shared role that can read artifacts/config and secrets
+  under `/data-agent/<environment>/*`.
+- **Artifact bucket**: shared bucket with per-instance prefixes for versioned
+  artifacts, config, and manifests.
+
+This model provides operational separation and database-level least privilege,
+but it is not hard IAM isolation between database agents because the shared
+Runtime IAM role can read all secrets under the environment prefix. If strict
+tenant or regulatory isolation is required, use a per-agent bootstrap/runtime
+role pattern with narrower secret ARNs, separate artifact prefixes or buckets,
+and independent deployment ownership.
+
 ## Inbound Authentication And Authorization
 
 The Gateway uses `CUSTOM_JWT` authorization. The deployment parameters define:

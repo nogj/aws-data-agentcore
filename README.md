@@ -195,6 +195,28 @@ file. Agent-specific values override the top-level defaults:
 }
 ```
 
+Checklist for adding a new database agent:
+
+- Create database-specific security-barrier views that expose only approved
+  relations and columns.
+- Create a dedicated read-only database role for that agent and grant it only
+  the approved views.
+- Create a Secrets Manager secret under `/data-agent/<environment>/<instance>`
+  containing that role's connection string.
+- Create a dedicated config YAML with the instance's prompts, data model,
+  glossary, synonyms, SQL rules, query limits, and capability grants.
+- Add `agents.<instance>` overrides to the parameter file for the database
+  secret, subnets, and security groups when they differ from the defaults.
+- Run `build.sh` once for the code artifact.
+- Run `publish.sh` with `DATA_AGENT_INSTANCE=<instance>` and
+  `CONFIG_FILE=<path-to-config>`.
+- Export the printed `ARTIFACT_KEY` and `CONFIG_KEY`, then run `deploy.sh` with
+  the same `DATA_AGENT_INSTANCE` and `CONFIG_FILE`.
+- Run `smoke_test.sh` for the instance and verify the Gateway lists/calls the
+  intended target.
+- Review audit logs, database query logs, and IAM/secret access before broad
+  access is granted.
+
 Versioned artifacts and configuration keys are published immutably. Use
 `scripts/cleanup_artifacts.py` to remove keys that are not referenced by the
 active manifest, the retained manifest window, or the currently deployed
