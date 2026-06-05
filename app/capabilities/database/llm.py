@@ -6,8 +6,8 @@ from langchain_aws import ChatBedrockConverse
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
-from .config import AppConfig, PromptTemplateConfig, load_secret
-from .models import SqlCandidate, SummaryCandidate
+from app.config import AppConfig, PromptTemplateConfig, load_secret
+from app.capabilities.database.models import SqlCandidate, SummaryCandidate
 
 
 def _chat_model(config: AppConfig):

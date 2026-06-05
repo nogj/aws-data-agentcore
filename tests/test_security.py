@@ -1,7 +1,11 @@
 import yaml
 
 from app.config import AppConfig
-from app.security import normalize_rows, validate_context, validate_question
+from app.capabilities.database.security import (
+    normalize_rows,
+    validate_context,
+    validate_question,
+)
 
 
 def config() -> AppConfig:

@@ -27,3 +27,11 @@ def test_summary_prompt_requires_question_language() -> None:
     assert "same language" in prompt
     assert "spanish" not in prompt
     assert "espanol" not in prompt
+
+
+def test_ask_database_capability_uses_service_identity() -> None:
+    capability = load_config().capability("ask_database")
+
+    assert capability.identity_mode == "service"
+    assert capability.required_grants == ["data:read"]
+    assert capability.sql_viewer_grant == "data:sql:read"

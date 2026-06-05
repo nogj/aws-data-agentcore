@@ -1,24 +1,32 @@
 # Read-Only Data Agent MCP for Amazon Bedrock AgentCore
 
-Production package for deploying a reusable, read-only database data agent
-using Amazon Bedrock AgentCore Runtime and Gateway.
+Production package for deploying a modular AgentCore tool hub, with the first
+implemented module being a reusable read-only database data agent.
 
-The runtime exposes one public tool, `ask_database`. SQLAlchemy Core provides
-the database execution abstraction without an internal subprocess. The
-database domain, authorized relations, glossary, prompts, and business
-terminology live only in `config/data-agent.yaml`.
+AgentCore Gateway is intended to act as the hub for multiple tool targets with
+different authorization and downstream identity models. The first Runtime target
+exposes one public tool, `ask_database`. SQLAlchemy Core provides the database
+execution abstraction without an internal subprocess. The database domain,
+authorized relations, glossary, prompts, and business terminology live only in
+`config/data-agent.yaml`.
 
 ## Contents
 
 ```text
 aws-data-agentcore/
-├── app/                     Python runtime code
+├── app/                     Shared runtime code
+│   └── capabilities/        Tool modules behind the Gateway hub
+│       └── database/        Read-only database capability
 ├── config/                  Versioned non-sensitive configuration for S3
+├── docs/                    Architecture and design notes
 ├── infrastructure/          CloudFormation for bootstrap, Runtime, and target
 ├── postgres/                Generic read-only PostgreSQL permission templates
 ├── scripts/                 Build, publication, and deployment scripts
 └── tests/                   Unit tests for critical controls
 ```
+
+See [docs/security_architecture.md](docs/security_architecture.md) for the
+detailed security architecture.
 
 ## Prerequisites
 
@@ -44,16 +52,18 @@ aws-data-agentcore/
 - Rejection and operational error messages are fixed configuration values and
   never invoke an LLM.
 - All LLM prompts are loaded from versioned configuration.
-- Security does not depend on the LLM: SQLGlot validates SQL and the database
-  enforces read-only permissions again.
+- Security does not depend on the LLM. For the database module, SQLGlot
+  validates SQL and the database enforces read-only permissions again. Future
+  modules must define equivalent deterministic guardrails for their own domain.
 - Database-specific transaction controls are implemented as explicit adapters.
   PostgreSQL is the first supported adapter.
 - Gateway validates the required JWT scope and a managed request interceptor
-  propagates validated scopes or application roles to the Runtime. The Runtime
-  fails closed when the trusted authorization header is absent.
-- The Gateway target is managed by CloudFormation for rollback, drift
-  detection, and clean deletion. Its stack is deployed after the Runtime so the
-  MCP endpoint can contain the URL-encoded Runtime ARN required by AgentCore.
+  propagates validated grants and bounded caller identity to target runtimes.
+  Each target still fails closed when trusted authorization context is absent.
+- Gateway targets are managed by CloudFormation for rollback, drift detection,
+  and clean deletion. The database target stack is deployed after the Runtime so
+  the MCP endpoint can contain the URL-encoded Runtime ARN required by
+  AgentCore.
 
 ## Preparation
 
@@ -150,25 +160,30 @@ the async request does not forcibly stop a synchronous DB thread before the
 database-side timeout fires.
 
 Supporting another database requires its SQLAlchemy driver, a matching SQLGlot
-dialect, and an adapter in `app/database.py` that applies equivalent read-only
-and timeout controls. Unsupported dialects fail closed.
+dialect, and an adapter in `app/capabilities/database/database.py` that applies
+equivalent read-only and timeout controls. Unsupported dialects fail closed.
 
 These sections can change without rebuilding the ZIP as long as their expected
 contract remains stable.
 
 Gateway validates inbound JWTs, including the configured `required_scope`.
-The deployed request interceptor derives `x-data-agent-scopes` from configured
-JWT claims and replaces any value supplied by a consumer. By default it accepts
-`scope`, `scp`, and `roles`. The Runtime also requires the configured grant, so
-missing propagation denies access.
+The deployed request interceptor derives the `x-data-agent-grants` header from
+configured JWT claims and replaces any value supplied by a consumer. It also
+emits a bounded `x-data-agent-identity` header containing only the configured
+identity claims. By default, in `scopes` mode, it accepts only `scope` and `scp`
+as grants and propagates `sub`, `oid`, `preferred_username`, `appid`, `azp`, and
+`tid` for audit. `roles` is reserved for `claims` mode. The Runtime also
+requires the configured grant, so missing propagation denies access.
 
 `authorization.mode` controls where the required grant is enforced first:
 
 - `scopes`: Gateway also sets `AllowedScopes`. Use this for delegated OAuth
-  scopes such as Entra `scp`.
+  scopes such as Entra `scp`. Accepted claims must be limited to `scope` and
+  `scp`.
 - `claims`: Gateway validates issuer and audience only; the managed interceptor
   and Runtime enforce `required_scope` from configured claims such as Entra
   `roles`. Use this for client-credentials flows with application roles.
+  Accepted claims must be `roles`.
 
 ## Microsoft Entra ID
 
@@ -218,6 +233,52 @@ authorization:
 Changing `authorization.mode` or `accepted_claims` affects the Gateway
 interceptor environment and requires redeploying the bootstrap stack, not only
 publishing a new S3 configuration file.
+
+## Hub Capability Model
+
+The `capabilities` section declares the authorization and downstream identity
+mode expected by each exposed tool or Gateway target. The Gateway is the hub;
+each target is a module with its own grants, identity mode, allowed headers,
+audit contract, and domain guardrails.
+
+```yaml
+capabilities:
+  - name: ask_database
+    target: data-agent
+    identity_mode: service
+    required_grants: [data:read]
+    sql_viewer_grant: data:sql:read
+```
+
+`identity_mode: service` means the target uses its own technical identity for
+downstream access. `ask_database` uses this mode: Gateway authorizes the caller,
+but PostgreSQL sees the fixed read-only database role from Secrets Manager.
+
+Use `identity_mode: on_behalf_of_user` for future capabilities that must access
+downstream systems with the caller's delegated authority, such as SharePoint,
+Jira, Salesforce, or an internal API with user-level authorization. Such
+capabilities must declare a `downstream_audience` and should use a dedicated
+AgentCore Identity resource credential provider for token exchange or an
+equivalent approved OBO pattern. Do not pass raw bearer tokens to every target
+as a generic convenience; only the target that performs OBO should receive the
+minimum token/context required for that exchange.
+
+Recommended grant naming for additional targets:
+
+- `cmdb:read` for fixed-identity read-only data access.
+- `data:sql:read` for generated SQL visibility.
+- `kb:query` for querying an approved knowledge base.
+- `docs:read` for user-delegated document search.
+- `tickets:create` for user-delegated ticket creation.
+
+Each target should receive only the headers it needs. The current Runtime target
+allowlists `x-data-agent-grants` and `x-data-agent-identity`; future OBO targets
+should have their own GatewayTarget metadata and credential-provider
+configuration rather than broadening this target's contract.
+`infrastructure/target.yaml` is parameterized with
+`TargetName`, `TargetDescription`, and `AllowedRequestHeaders` so the same
+template can be reused for additional Gateway targets with narrower header
+contracts.
 
 ## Data Governance
 

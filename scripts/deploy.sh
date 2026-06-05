@@ -37,7 +37,8 @@ aws cloudformation deploy \
     JwtAllowedAudience="$(read_param jwt_allowed_audience)" \
     RequiredScope="$(read_param required_scope)" \
     AuthorizationMode="$(python3 -c 'import sys,yaml; print(yaml.safe_load(open(sys.argv[1]))["authorization"]["mode"])' "${ROOT}/config/data-agent.yaml")" \
-    AcceptedClaims="$(python3 -c 'import sys,yaml; print(",".join(yaml.safe_load(open(sys.argv[1]))["authorization"]["accepted_claims"]))' "${ROOT}/config/data-agent.yaml")"
+    AcceptedClaims="$(python3 -c 'import sys,yaml; print(",".join(yaml.safe_load(open(sys.argv[1]))["authorization"]["accepted_claims"]))' "${ROOT}/config/data-agent.yaml")" \
+    IdentityClaims="$(python3 -c 'import sys,yaml; print(",".join(yaml.safe_load(open(sys.argv[1]))["authorization"].get("identity_claims", [])))' "${ROOT}/config/data-agent.yaml")"
 
 RUNTIME_ROLE_ARN="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${BOOTSTRAP_STACK}" --query "Stacks[0].Outputs[?OutputKey=='RuntimeRoleArn'].OutputValue" --output text)"
 GATEWAY_ID="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${BOOTSTRAP_STACK}" --query "Stacks[0].Outputs[?OutputKey=='GatewayIdentifier'].OutputValue" --output text)"

@@ -6,14 +6,19 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from app.authorization import claim_values
+from app.authorization import CallerIdentity, claim_values, identity_from_header
 from app.audit import emit
+from app.capabilities.database.database import execute_read_only_sql
+from app.capabilities.database.llm import generate_sql, summarize_results
+from app.capabilities.database.models import AskDatabaseRequest, AskDatabaseResponse
+from app.capabilities.database.security import (
+    has_scope,
+    normalize_rows,
+    validate_context,
+    validate_question,
+)
+from app.capabilities.database.sql_validator import validate_sql
 from app.config import load_config
-from app.database import execute_read_only_sql
-from app.llm import generate_sql, summarize_results
-from app.models import AskDatabaseRequest, AskDatabaseResponse
-from app.security import has_scope, normalize_rows, validate_context, validate_question
-from app.sql_validator import validate_sql
 
 
 logging.basicConfig(level=logging.INFO)
@@ -34,10 +39,22 @@ def _grants_from_context(ctx: Context | None) -> set[str]:
         return set()
     try:
         request = ctx.request_context.request
-        raw = request.headers.get("x-data-agent-scopes", "")
+        raw = request.headers.get("x-data-agent-grants", "")
         return set(claim_values(raw))
     except AttributeError:
         return set()
+
+
+def _identity_from_context(ctx: Context | None) -> CallerIdentity:
+    """Read trusted caller identity claims injected by the Gateway interceptor."""
+
+    if ctx is None:
+        return CallerIdentity()
+    try:
+        request = ctx.request_context.request
+        return identity_from_header(request.headers.get("x-data-agent-identity"))
+    except AttributeError:
+        return CallerIdentity()
 
 
 @mcp.tool(
@@ -59,7 +76,9 @@ async def ask_database(
     started = time.perf_counter()
     trace_id = str(uuid.uuid4())
     config = load_config()
+    capability = config.capability("ask_database")
     grants = _grants_from_context(ctx)
+    caller = _identity_from_context(ctx)
 
     def response(**kwargs: Any) -> dict[str, Any]:
         # Compute elapsed time at the last possible moment for every response path.
@@ -74,7 +93,7 @@ async def ask_database(
             context=context,
         )
         # Authorization must fail closed if the trusted Gateway scope header is absent.
-        if not has_scope(grants, config.authorization.required_scope):
+        if not all(has_scope(grants, grant) for grant in capability.required_grants):
             raise PermissionError("missing_required_scope")
         validate_question(request.question, config)
         validate_context(request.context, config)
@@ -99,7 +118,10 @@ async def ask_database(
             )
         can_show_sql = request.include_sql and (
             config.query.allow_sql_by_default
-            or has_scope(grants, config.authorization.sql_viewer_scope)
+            or has_scope(
+                grants,
+                capability.sql_viewer_grant or config.authorization.sql_viewer_scope,
+            )
         )
         warnings = [*candidate.assumptions, *summary.warnings]
         emit(
@@ -110,6 +132,8 @@ async def ask_database(
             relations=validated.relations_used,
             row_count=len(rows),
             elapsed_ms=int((time.perf_counter() - started) * 1000),
+            identity_mode=capability.identity_mode,
+            **caller.audit_fields(),
         )
         return response(
             status="ok",

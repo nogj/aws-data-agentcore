@@ -21,6 +21,9 @@ Parameters:
   AcceptedClaims:
     Type: CommaDelimitedList
     Default: "scope,scp,roles"
+  IdentityClaims:
+    Type: CommaDelimitedList
+    Default: "sub,oid,preferred_username,appid,azp,tid"
   NoncurrentVersionRetentionDays:
     Type: Number
     Default: 90
@@ -182,6 +185,7 @@ Resources:
         Variables:
           REQUIRED_SCOPE: !Ref RequiredScope
           ACCEPTED_CLAIMS: !Join [",", !Ref AcceptedClaims]
+          IDENTITY_CLAIMS: !Join [",", !Ref IdentityClaims]
       Code:
         ZipFile: |
           import base64
@@ -197,11 +201,14 @@ Resources:
               return list(raw)
 
 
-          def _decode_grants(authorization):
+          def _decode_claims(authorization):
               token = authorization.removeprefix("Bearer ").strip()
               payload = token.split(".")[1]
               payload += "=" * (-len(payload) % 4)
-              claims = json.loads(base64.urlsafe_b64decode(payload))
+              return json.loads(base64.urlsafe_b64decode(payload))
+
+
+          def _decode_grants(claims):
               accepted_claims = [
                   claim.strip()
                   for claim in os.environ["ACCEPTED_CLAIMS"].split(",")
@@ -213,14 +220,32 @@ Resources:
               return sorted(set(grants))
 
 
+          def _identity_header(claims):
+              identity_claims = [
+                  claim.strip()
+                  for claim in os.environ["IDENTITY_CLAIMS"].split(",")
+                  if claim.strip()
+              ]
+              selected = {
+                  claim: claims[claim]
+                  for claim in identity_claims
+                  if isinstance(claims.get(claim), str) and claims.get(claim)
+              }
+              payload = json.dumps(selected, separators=(",", ":"), sort_keys=True).encode()
+              return base64.urlsafe_b64encode(payload).decode().rstrip("=")
+
+
           def handler(event, _context):
               request = event.get("mcp", {}).get("gatewayRequest", {})
               headers = request.get("headers", {})
               normalized_headers = {key.lower(): value for key, value in headers.items()}
               try:
-                  grants = _decode_grants(normalized_headers.get("authorization", ""))
+                  claims = _decode_claims(normalized_headers.get("authorization", ""))
+                  grants = _decode_grants(claims)
+                  identity = _identity_header(claims)
               except Exception:
                   grants = []
+                  identity = ""
 
               required_scope = os.environ["REQUIRED_SCOPE"]
               if required_scope not in grants:
@@ -242,9 +267,15 @@ Resources:
               forwarded = {
                   key: value
                   for key, value in headers.items()
-                  if key.lower() not in {"authorization", "x-data-agent-scopes"}
+                  if key.lower()
+                  not in {
+                      "authorization",
+                      "x-data-agent-grants",
+                      "x-data-agent-identity",
+                  }
               }
-              forwarded["x-data-agent-scopes"] = " ".join(grants)
+              forwarded["x-data-agent-grants"] = " ".join(grants)
+              forwarded["x-data-agent-identity"] = identity
               return {
                   "interceptorOutputVersion": "1.0",
                   "mcp": {

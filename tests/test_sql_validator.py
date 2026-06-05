@@ -1,7 +1,7 @@
 import yaml
 
 from app.config import AppConfig
-from app.sql_validator import SqlValidationError, validate_sql
+from app.capabilities.database.sql_validator import SqlValidationError, validate_sql
 
 
 def config() -> AppConfig:

@@ -1,7 +1,7 @@
 import re
 from typing import Any
 
-from .config import AppConfig
+from app.config import AppConfig
 
 
 OUT_OF_SCOPE_PATTERNS = [

@@ -81,7 +81,22 @@ class AuthorizationConfig(BaseModel):
     mode: Literal["scopes", "claims"] = "scopes"
     required_scope: str = "data:read"
     sql_viewer_scope: str = "data:sql:read"
-    accepted_claims: list[str] = Field(default_factory=lambda: ["scope", "scp", "roles"])
+    accepted_claims: list[str] = Field(default_factory=lambda: ["scope", "scp"])
+    identity_claims: list[str] = Field(
+        default_factory=lambda: ["sub", "oid", "preferred_username", "appid", "azp", "tid"]
+    )
+
+
+class CapabilityConfig(BaseModel):
+    """Authorization and downstream identity policy for one exposed capability."""
+
+    name: str
+    target: str
+    identity_mode: Literal["service", "on_behalf_of_user"] = "service"
+    required_grants: list[str]
+    sql_viewer_grant: str | None = None
+    downstream_audience: str | None = None
+    credential_provider_name: str | None = None
 
 
 class OutputConfig(BaseModel):
@@ -107,9 +122,24 @@ class AppConfig(BaseModel):
     query: QueryConfig
     database: DatabaseConfig
     authorization: AuthorizationConfig
+    capabilities: list[CapabilityConfig] = Field(default_factory=list)
     data_model: DataModelConfig
     output: OutputConfig
     observability: ObservabilityConfig
+
+    def capability(self, name: str) -> CapabilityConfig:
+        """Return the configured policy for a named capability."""
+
+        for capability in self.capabilities:
+            if capability.name == name:
+                return capability
+        return CapabilityConfig(
+            name=name,
+            target="data-agent",
+            identity_mode="service",
+            required_grants=[self.authorization.required_scope],
+            sql_viewer_grant=self.authorization.sql_viewer_scope,
+        )
 
 
 def load_config() -> AppConfig:

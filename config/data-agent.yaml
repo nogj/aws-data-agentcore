@@ -68,7 +68,21 @@ authorization:
   accepted_claims:
     - scope
     - scp
-    - roles
+  identity_claims:
+    - sub
+    - oid
+    - preferred_username
+    - appid
+    - azp
+    - tid
+
+capabilities:
+  - name: ask_database
+    target: data-agent
+    identity_mode: service
+    required_grants:
+      - data:read
+    sql_viewer_grant: data:sql:read
 
 data_model:
   description: >

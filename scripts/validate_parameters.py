@@ -18,6 +18,37 @@ def _contains_placeholder(value: Any) -> bool:
     return False
 
 
+def _validate_authorization_config(authorization: dict[str, Any]) -> None:
+    """Validate that authorization mode and accepted claims cannot drift apart."""
+
+    accepted_claims = set(authorization.get("accepted_claims", []))
+    mode = authorization.get("mode")
+    if mode not in {"scopes", "claims"}:
+        raise SystemExit("authorization.mode must be either scopes or claims")
+    unsupported_claims = accepted_claims - {"scope", "scp", "roles"}
+    if unsupported_claims:
+        raise SystemExit(
+            f"Unsupported authorization claims: {', '.join(sorted(unsupported_claims))}"
+        )
+    if not accepted_claims:
+        raise SystemExit("At least one authorization claim must be configured")
+    if mode == "scopes":
+        invalid_claims = accepted_claims - {"scope", "scp"}
+        if invalid_claims:
+            raise SystemExit(
+                "authorization.mode scopes accepts only scope or scp claims; "
+                f"remove: {', '.join(sorted(invalid_claims))}"
+            )
+        if accepted_claims.isdisjoint({"scope", "scp"}):
+            raise SystemExit(
+                "authorization.mode scopes requires scope or scp in accepted_claims"
+            )
+    if mode == "claims" and accepted_claims != {"roles"}:
+        raise SystemExit(
+            "authorization.mode claims currently supports only roles in accepted_claims"
+        )
+
+
 def main() -> None:
     path = Path(sys.argv[1])
     environment = sys.argv[2]
@@ -42,26 +73,49 @@ def main() -> None:
         raise SystemExit(
             "Gateway required_scope must match authorization.required_scope in configuration"
         )
-    accepted_claims = set(authorization.get("accepted_claims", []))
-    mode = authorization.get("mode")
-    if mode not in {"scopes", "claims"}:
-        raise SystemExit("authorization.mode must be either scopes or claims")
-    unsupported_claims = accepted_claims - {"scope", "scp", "roles"}
-    if unsupported_claims:
+    _validate_authorization_config(authorization)
+    identity_claims = set(authorization.get("identity_claims", []))
+    unsupported_identity_claims = identity_claims - {
+        "sub",
+        "oid",
+        "preferred_username",
+        "upn",
+        "appid",
+        "azp",
+        "client_id",
+        "tid",
+    }
+    if unsupported_identity_claims:
         raise SystemExit(
-            f"Unsupported authorization claims: {', '.join(sorted(unsupported_claims))}"
+            "Unsupported identity claims: "
+            f"{', '.join(sorted(unsupported_identity_claims))}"
         )
-    if not accepted_claims:
-        raise SystemExit("At least one authorization claim must be configured")
-    if mode == "scopes" and accepted_claims.isdisjoint({"scope", "scp"}):
-        raise SystemExit(
-            "authorization.mode scopes requires scope or scp in accepted_claims"
-        )
-    if mode == "claims" and "roles" not in accepted_claims:
-        raise SystemExit(
-            "authorization.mode claims is intended for claim validation; include roles "
-            "when using Entra client credentials"
-        )
+    capabilities = config.get("capabilities", [])
+    ask_database = next(
+        (
+            capability
+            for capability in capabilities
+            if capability.get("name") == "ask_database"
+        ),
+        None,
+    )
+    if ask_database is not None:
+        required_grants = set(ask_database.get("required_grants", []))
+        if required_scope not in required_grants:
+            raise SystemExit(
+                "ask_database.required_grants must include authorization.required_scope"
+            )
+        identity_mode = ask_database.get("identity_mode")
+        if identity_mode not in {"service", "on_behalf_of_user"}:
+            raise SystemExit(
+                "capability identity_mode must be service or on_behalf_of_user"
+            )
+        if identity_mode == "on_behalf_of_user" and not ask_database.get(
+            "downstream_audience"
+        ):
+            raise SystemExit(
+                "on_behalf_of_user capabilities must declare downstream_audience"
+            )
 
     secret_arn = parameters.get("database_secret_arn", "")
     expected_secret_path = f":secret:/data-agent/{environment}/"

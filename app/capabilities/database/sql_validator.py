@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from sqlglot import exp, parse
 
-from .config import AppConfig
+from app.config import AppConfig
 
 
 class SqlValidationError(ValueError):

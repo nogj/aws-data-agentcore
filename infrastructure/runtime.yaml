@@ -41,7 +41,8 @@ Resources:
       ProtocolConfiguration: MCP
       RequestHeaderConfiguration:
         RequestHeaderAllowlist:
-          - x-data-agent-scopes
+          - x-data-agent-grants
+          - x-data-agent-identity
       NetworkConfiguration:
         NetworkMode: VPC
         NetworkModeConfig:

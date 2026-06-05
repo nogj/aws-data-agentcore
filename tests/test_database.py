@@ -1,10 +1,10 @@
 from pathlib import Path
 from typing import Any
 
-import app.database as database
 import yaml
+import app.capabilities.database.database as database
+from app.capabilities.database.models import QueryResult
 from app.config import AppConfig
-from app.models import QueryResult
 
 
 ROOT = Path(__file__).resolve().parents[1]

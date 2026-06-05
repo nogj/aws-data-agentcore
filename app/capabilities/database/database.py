@@ -5,8 +5,8 @@ from collections.abc import Callable
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.pool import NullPool
 
-from .config import AppConfig, DatabaseConfig, load_secret
-from .models import QueryResult
+from app.config import AppConfig, DatabaseConfig, load_secret
+from app.capabilities.database.models import QueryResult
 
 
 DatabaseSetup = Callable[[Connection, DatabaseConfig], None]
