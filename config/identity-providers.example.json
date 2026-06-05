@@ -1,0 +1,40 @@
+{
+  "description": "Example inventory for AgentCore Identity credential providers used by OBO targets. This file is documentation/config planning only; provider creation is environment- and IdP-specific.",
+  "providers": [
+    {
+      "name": "entra-docs-obo",
+      "target": "user-documents",
+      "identity_mode": "on_behalf_of_user",
+      "provider_type": "OAUTH",
+      "provider_arn": "arn:aws:bedrock-agentcore:eu-west-1:111122223333:token-vault/default/oauth2credentialprovider/entra-docs-obo",
+      "downstream_audience": "api://sharepoint-or-internal-docs",
+      "scopes": [
+        "https://graph.microsoft.com/.default"
+      ],
+      "grant_type": "AUTHORIZATION_CODE",
+      "allowed_request_headers": [
+        "x-data-agent-grants",
+        "x-data-agent-identity"
+      ],
+      "notes": "Use only for targets that require delegated user access. Database agents should remain identity_mode=service."
+    },
+    {
+      "name": "entra-ticketing-obo",
+      "target": "ticketing",
+      "identity_mode": "on_behalf_of_user",
+      "provider_type": "OAUTH",
+      "provider_arn": "arn:aws:bedrock-agentcore:eu-west-1:111122223333:token-vault/default/oauth2credentialprovider/entra-ticketing-obo",
+      "downstream_audience": "api://ticketing-api",
+      "scopes": [
+        "tickets.read",
+        "tickets.write"
+      ],
+      "grant_type": "AUTHORIZATION_CODE",
+      "allowed_request_headers": [
+        "x-data-agent-grants",
+        "x-data-agent-identity"
+      ],
+      "notes": "Write-capable OBO targets also need approval gates, idempotency, and explicit write grants."
+    }
+  ]
+}

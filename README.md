@@ -359,6 +359,12 @@ equivalent approved OBO pattern. Do not pass raw bearer tokens to every target
 as a generic convenience; only the target that performs OBO should receive the
 minimum token/context required for that exchange.
 
+AgentCore Identity is treated as a common hub capability for targets that need
+OBO, not as a mandatory dependency for every target. The database agent remains
+`identity_mode: service` and does not use AgentCore Identity. Keep OBO credential
+providers target-scoped; `config/identity-providers.example.json` shows the
+expected inventory shape for future delegated-access targets.
+
 Recommended grant naming for additional targets:
 
 - `cmdb:read` for fixed-identity read-only data access.

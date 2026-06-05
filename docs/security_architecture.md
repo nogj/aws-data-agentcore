@@ -533,6 +533,18 @@ inherit the database target contract by default. Each target should define:
 - deterministic guardrails for its domain.
 - resource-specific residual risks.
 
+AgentCore Identity is a shared hub capability for targets that require
+delegated downstream access. It is not part of the database target's execution
+path. The first implemented database target uses `identity_mode: service`;
+PostgreSQL sees a fixed read-only role, while caller identity is used for
+Gateway authorization and audit only.
+
+For OBO targets, the shared hub owns the conventions for provider inventory,
+naming, audit, and review. Each target owns its own credential provider,
+downstream audience, scopes, allowed headers, runtime behavior, and residual
+risk assessment. `config/identity-providers.example.json` documents the
+expected inventory shape for future AgentCore Identity providers.
+
 Common target patterns:
 
 ```yaml
