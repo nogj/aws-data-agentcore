@@ -72,7 +72,8 @@ detailed security architecture.
    columns and relationships.
 3. Apply the generic PostgreSQL templates in `postgres/` using your approved
    database, schema, role names, and the concrete authorized view list.
-4. Create the secrets:
+4. Create the database secret. For a single `data-agent` deployment, one secret
+   is enough:
 
 ```bash
 aws secretsmanager create-secret \
@@ -80,6 +81,23 @@ aws secretsmanager create-secret \
   --secret-string '{"database_uri":"postgresql+psycopg://ROLE:REPLACE@db.internal:5432/DATABASE?sslmode=verify-full"}'
 
 ```
+
+For multiple database agents, create one database secret per instance so each
+Runtime receives only its own connection string and read-only role:
+
+```bash
+aws secretsmanager create-secret \
+  --name /data-agent/prod/cmdb \
+  --secret-string '{"database_uri":"postgresql+psycopg://CMDB_ROLE:REPLACE@cmdb.internal:5432/CMDB?sslmode=verify-full"}'
+
+aws secretsmanager create-secret \
+  --name /data-agent/prod/assets \
+  --secret-string '{"database_uri":"postgresql+psycopg://ASSETS_ROLE:REPLACE@assets.internal:5432/ASSETS?sslmode=verify-full"}'
+```
+
+Reference those ARNs under `agents.<instance>.database_secret_arn` in the
+parameter file. Secret names must stay under `/data-agent/<environment>/` so the
+Runtime IAM policy and deployment validation remain aligned.
 
 5. Complete `infrastructure/parameters.json` or create an equivalent file per
    environment. Deployment scripts use `parameters.<environment>.json` when it
