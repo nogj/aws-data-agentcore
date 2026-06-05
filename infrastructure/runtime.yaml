@@ -13,6 +13,13 @@ Parameters:
     Type: String
   RuntimeRoleArn:
     Type: String
+    Default: ""
+    Description: Optional existing runtime role ARN. Leave empty to create a per-runtime role.
+  RuntimeRoleName:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|[A-Za-z0-9_+=,.@-]{1,64}"
+    Description: Optional name for the per-runtime IAM role created by this stack.
   DatabaseSecretArn:
     Type: String
   OpenAISecretArn:
@@ -30,8 +37,71 @@ Parameters:
 
 Conditions:
   UseExplicitAgentRuntimeName: !Not [!Equals [!Ref AgentRuntimeName, ""]]
+  UseProvidedRuntimeRole: !Not [!Equals [!Ref RuntimeRoleArn, ""]]
+  CreateRuntimeRole: !Equals [!Ref RuntimeRoleArn, ""]
+  UseExplicitRuntimeRoleName: !Not [!Equals [!Ref RuntimeRoleName, ""]]
+  UseOpenAISecret: !Not [!Equals [!Ref OpenAISecretArn, ""]]
 
 Resources:
+  RuntimeExecutionRole:
+    Type: AWS::IAM::Role
+    Condition: CreateRuntimeRole
+    Properties:
+      RoleName: !If
+        - UseExplicitRuntimeRoleName
+        - !Ref RuntimeRoleName
+        - !Ref AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:*"
+      Policies:
+        - PolicyName: RuntimeMinimumAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadAgentArtifactsAndConfig
+                Effect: Allow
+                Action: [s3:GetObject, s3:GetObjectVersion]
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/${ArtifactKey}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${ArtifactBucketName}/${ConfigKey}"
+              - Sid: ReadRuntimeSecrets
+                Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref DatabaseSecretArn
+                  - !If
+                    - UseOpenAISecret
+                    - !Ref OpenAISecretArn
+                    - !Ref AWS::NoValue
+              - Sid: InvokeBedrockModels
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: "*"
+              - Sid: WriteLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:DescribeLogStreams
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*"
+              - Sid: DescribeLogGroups
+                Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: "*"
+
   Runtime:
     Type: AWS::BedrockAgentCore::Runtime
     Properties:
@@ -59,7 +129,10 @@ Resources:
         NetworkModeConfig:
           Subnets: !Ref PrivateSubnetIds
           SecurityGroups: !Ref RuntimeSecurityGroupIds
-      RoleArn: !Ref RuntimeRoleArn
+      RoleArn: !If
+        - UseProvidedRuntimeRole
+        - !Ref RuntimeRoleArn
+        - !GetAtt RuntimeExecutionRole.Arn
       EnvironmentVariables:
         APP_ENV: !Ref Environment
         CONFIG_BUCKET: !Ref ArtifactBucketName
@@ -79,3 +152,8 @@ Outputs:
     Value: !Ref Runtime
   RuntimeId:
     Value: !GetAtt Runtime.AgentRuntimeId
+  RuntimeRoleArn:
+    Value: !If
+      - UseProvidedRuntimeRole
+      - !Ref RuntimeRoleArn
+      - !GetAtt RuntimeExecutionRole.Arn

@@ -41,6 +41,7 @@ else
   STACK_SUFFIX="-${DATA_AGENT_INSTANCE}"
   AGENT_RUNTIME_NAME="$(python3 -c 'import re,sys; print("read_only_data_agent_{}_{}".format(sys.argv[1], re.sub(r"[^A-Za-z0-9_]", "_", sys.argv[2]))[:64])' "${ENVIRONMENT}" "${DATA_AGENT_INSTANCE}")"
 fi
+RUNTIME_ROLE_NAME="$(python3 -c 'import re,sys; print("data-agent-runtime-{}-{}".format(sys.argv[1], re.sub(r"[^A-Za-z0-9_+=,.@-]", "-", sys.argv[2]))[:64])' "${ENVIRONMENT}" "${DATA_AGENT_INSTANCE}")"
 RUNTIME_STACK="data-agent-runtime-${ENVIRONMENT}${STACK_SUFFIX}"
 TARGET_STACK="data-agent-target-${ENVIRONMENT}${STACK_SUFFIX}"
 
@@ -59,19 +60,20 @@ aws cloudformation deploy \
     AcceptedClaims="$(python3 -c 'import sys,yaml; print(",".join(yaml.safe_load(open(sys.argv[1]))["authorization"]["accepted_claims"]))' "${CONFIG_FILE}")" \
     IdentityClaims="$(python3 -c 'import sys,yaml; print(",".join(yaml.safe_load(open(sys.argv[1]))["authorization"].get("identity_claims", [])))' "${CONFIG_FILE}")"
 
-RUNTIME_ROLE_ARN="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${BOOTSTRAP_STACK}" --query "Stacks[0].Outputs[?OutputKey=='RuntimeRoleArn'].OutputValue" --output text)"
 GATEWAY_ID="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${BOOTSTRAP_STACK}" --query "Stacks[0].Outputs[?OutputKey=='GatewayIdentifier'].OutputValue" --output text)"
 
 aws cloudformation deploy \
   --region "${REGION}" \
   --stack-name "${RUNTIME_STACK}" \
   --template-file "${ROOT}/infrastructure/runtime.yaml" \
+  --capabilities CAPABILITY_NAMED_IAM \
   --parameter-overrides \
     Environment="${ENVIRONMENT}" \
     ArtifactBucketName="${BUCKET}" \
     ArtifactKey="${ARTIFACT_KEY}" \
     ConfigKey="${CONFIG_KEY}" \
-    RuntimeRoleArn="${RUNTIME_ROLE_ARN}" \
+    RuntimeRoleArn="${RUNTIME_ROLE_ARN:-}" \
+    RuntimeRoleName="${RUNTIME_ROLE_NAME}" \
     DatabaseSecretArn="$(read_agent_param database_secret_arn)" \
     OpenAISecretArn="$(read_optional_agent_param openai_secret_arn)" \
     PrivateSubnetIds="$(read_agent_param private_subnet_ids)" \

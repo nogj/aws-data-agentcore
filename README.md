@@ -146,8 +146,8 @@ bound with `SMOKE_MAX_ROWS`.
 
 The Gateway is shared. Each database agent should be deployed as a separate
 Runtime and GatewayTarget with its own config file, database secret, target
-name, grants, and authorized data model. The default `data-agent` instance keeps
-the legacy stack names and S3 key layout.
+name, Runtime IAM role, grants, and authorized data model. The default
+`data-agent` instance keeps the legacy stack names and S3 key layout.
 
 For a second database agent:
 
@@ -161,8 +161,11 @@ DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/smoke_test
 ```
 
 `DATA_AGENT_INSTANCE` drives the Runtime stack suffix, target name, manifest
-prefix, and smoke-test target selection. Override `TARGET_NAME` only if the
-Gateway target name should differ from the instance name.
+prefix, per-instance Runtime IAM role name, and smoke-test target selection.
+Override `TARGET_NAME` only if the Gateway target name should differ from the
+instance name. `deploy.sh` lets `infrastructure/runtime.yaml` create the
+Runtime IAM role by default; pass `RUNTIME_ROLE_ARN` only for a deliberate
+legacy/shared-role override.
 
 Prompts are also per instance. Each Runtime receives its own `CONFIG_KEY`, so
 the `prompts.sql_generation` and `prompts.result_summary` sections in

@@ -104,20 +104,27 @@ The hub design has shared boundaries plus module-local boundaries:
 
 ## Deployment Role Inventory
 
-The bootstrap deployment creates the IAM roles used by the shared Gateway hub,
-the request interceptor, and AgentCore Runtime targets. For multi-agent
-deployments, these IAM roles are created once per environment by the bootstrap
-stack and reused by each database Runtime/target instance.
+The deployment creates IAM roles for the shared Gateway hub, request
+interceptor, and each AgentCore Runtime target. Gateway-level roles are created
+once per environment by the bootstrap stack. Runtime execution roles are created
+by each Runtime stack so every database agent instance can be scoped to its own
+artifact, config, and secret.
 
 | Role | Created By | Trusted Principal | Main Permissions | Used By |
 | --- | --- | --- | --- | --- |
-| `data-agent-runtime-<environment>` | `infrastructure/bootstrap.yaml` | `bedrock-agentcore.amazonaws.com` | Read versioned artifacts and config from the artifact bucket, read Secrets Manager secrets under `/data-agent/<environment>/*`, invoke Bedrock models, and write AgentCore logs. | AgentCore Runtime stacks for database targets. |
 | `data-agent-gateway-<environment>` | `infrastructure/bootstrap.yaml` | `bedrock-agentcore.amazonaws.com` | Invoke AgentCore Runtime and invoke the request interceptor Lambda. | AgentCore Gateway and GatewayTarget routing. |
 | `data-agent-scope-propagation-<environment>` | `infrastructure/bootstrap.yaml` | `lambda.amazonaws.com` | AWS managed basic Lambda execution permissions for CloudWatch logging. | Request interceptor Lambda. |
+| `data-agent-runtime-<environment>-<instance>` | `infrastructure/runtime.yaml` | `bedrock-agentcore.amazonaws.com` | Read only the Runtime's configured artifact and config S3 objects, read that instance's database secret and optional OpenAI secret, invoke Bedrock models, and write AgentCore logs. | One AgentCore Runtime instance. |
 
 The `GatewayTarget` resources do not create separate IAM roles. They use
 `CredentialProviderType: GATEWAY_IAM_ROLE`, so Gateway invokes target Runtime
 endpoints through the shared Gateway role.
+
+`infrastructure/bootstrap.yaml` may still contain the older
+`data-agent-runtime-<environment>` role for compatibility with existing stacks
+or explicit `RuntimeRoleArn` overrides. New deployments should let
+`infrastructure/runtime.yaml` create the per-instance Runtime role instead of
+passing the shared bootstrap role.
 
 The database technical role is not created by CloudFormation. It is prepared in
 the target PostgreSQL database using the SQL templates under `postgres/`, then
@@ -139,16 +146,19 @@ Role and credential ownership summary:
 
 ## Runtime Isolation Model
 
-Multiple database agents share the same Gateway hub and, by default, the same
-environment-level Runtime IAM role. Each database agent instance is isolated by
-its own AgentCore Runtime stack, GatewayTarget, S3 configuration key, Secrets
-Manager database secret, authorized data model, prompts, SQL rules, network
-settings, and PostgreSQL read-only role.
+Multiple database agents share the same Gateway hub, but each database agent
+instance should run with its own Runtime IAM role. Each instance is isolated by
+its own AgentCore Runtime stack, GatewayTarget, S3 artifact/config keys,
+Secrets Manager database secret, authorized data model, prompts, SQL rules,
+network settings, Runtime IAM role, and PostgreSQL read-only role.
 
 Per-instance isolation boundaries:
 
 - **Runtime stack**: `data-agent-runtime-<environment>-<instance>` for
   non-default instances.
+- **Runtime IAM role**: `data-agent-runtime-<environment>-<instance>`, scoped
+  to that Runtime's artifact, config, database secret, optional OpenAI secret,
+  model invocation, and logs.
 - **GatewayTarget**: one target name per database agent instance.
 - **Configuration**: each instance receives its own `CONFIG_KEY`, including
   prompts, glossary, synonyms, data model, query limits, and capability grants.
@@ -164,17 +174,13 @@ Shared boundaries:
 - **JWT authorizer and request interceptor**: shared inbound authentication and
   grant derivation.
 - **Gateway IAM role**: shared role used by Gateway to invoke Runtime targets.
-- **Runtime IAM role**: shared role that can read artifacts/config and secrets
-  under `/data-agent/<environment>/*`.
 - **Artifact bucket**: shared bucket with per-instance prefixes for versioned
   artifacts, config, and manifests.
 
-This model provides operational separation and database-level least privilege,
-but it is not hard IAM isolation between database agents because the shared
-Runtime IAM role can read all secrets under the environment prefix. If strict
-tenant or regulatory isolation is required, use a per-agent bootstrap/runtime
-role pattern with narrower secret ARNs, separate artifact prefixes or buckets,
-and independent deployment ownership.
+This model provides per-instance IAM separation for runtime secrets and config,
+plus database-level least privilege. If strict tenant or regulatory isolation is
+required beyond this, use separate bootstrap stacks, artifact buckets, Gateway
+instances, KMS keys, and deployment ownership boundaries.
 
 ## Inbound Authentication And Authorization
 
