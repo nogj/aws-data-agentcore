@@ -164,6 +164,12 @@ DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/smoke_test
 prefix, and smoke-test target selection. Override `TARGET_NAME` only if the
 Gateway target name should differ from the instance name.
 
+Prompts are also per instance. Each Runtime receives its own `CONFIG_KEY`, so
+the `prompts.sql_generation` and `prompts.result_summary` sections in
+`CONFIG_FILE` are scoped to that database agent. Use separate config files when
+different databases need different prompt wording, glossary, synonyms, SQL
+rules, row limits, or authorized data models.
+
 Per-agent infrastructure settings can live under `agents` in the parameter
 file. Agent-specific values override the top-level defaults:
 
