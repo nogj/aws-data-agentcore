@@ -102,6 +102,41 @@ The hub design has shared boundaries plus module-local boundaries:
 5. **LLM boundary**: LLM prompts and completions are untrusted data. Fixed code
    and deterministic validators make authorization and safety decisions.
 
+## Deployment Role Inventory
+
+The bootstrap deployment creates the IAM roles used by the shared Gateway hub,
+the request interceptor, and AgentCore Runtime targets. For multi-agent
+deployments, these IAM roles are created once per environment by the bootstrap
+stack and reused by each database Runtime/target instance.
+
+| Role | Created By | Trusted Principal | Main Permissions | Used By |
+| --- | --- | --- | --- | --- |
+| `data-agent-runtime-<environment>` | `infrastructure/bootstrap.yaml` | `bedrock-agentcore.amazonaws.com` | Read versioned artifacts and config from the artifact bucket, read Secrets Manager secrets under `/data-agent/<environment>/*`, invoke Bedrock models, and write AgentCore logs. | AgentCore Runtime stacks for database targets. |
+| `data-agent-gateway-<environment>` | `infrastructure/bootstrap.yaml` | `bedrock-agentcore.amazonaws.com` | Invoke AgentCore Runtime and invoke the request interceptor Lambda. | AgentCore Gateway and GatewayTarget routing. |
+| `data-agent-scope-propagation-<environment>` | `infrastructure/bootstrap.yaml` | `lambda.amazonaws.com` | AWS managed basic Lambda execution permissions for CloudWatch logging. | Request interceptor Lambda. |
+
+The `GatewayTarget` resources do not create separate IAM roles. They use
+`CredentialProviderType: GATEWAY_IAM_ROLE`, so Gateway invokes target Runtime
+endpoints through the shared Gateway role.
+
+The database technical role is not created by CloudFormation. It is prepared in
+the target PostgreSQL database using the SQL templates under `postgres/`, then
+stored indirectly in each instance's Secrets Manager connection string. For
+multiple database agents, create a separate database role and secret per
+instance whenever the read perimeter differs.
+
+Role and credential ownership summary:
+
+- **Caller identity**: external OIDC/JWT principal, validated by Gateway.
+- **Gateway role**: AWS service role used by Gateway to invoke targets and the
+  interceptor.
+- **Runtime role**: AWS service role used by AgentCore Runtime to read config,
+  secrets, invoke models, and log.
+- **Interceptor role**: Lambda execution role used only for request
+  transformation and logging.
+- **Database role**: PostgreSQL read-only technical role used by the database
+  agent; it is not the end user's identity.
+
 ## Inbound Authentication And Authorization
 
 The Gateway uses `CUSTOM_JWT` authorization. The deployment parameters define:
