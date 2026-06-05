@@ -147,7 +147,7 @@ bound with `SMOKE_MAX_ROWS`.
 The Gateway is shared. Each database agent should be deployed as a separate
 Runtime and GatewayTarget with its own config file, database secret, target
 name, Runtime IAM role, grants, and authorized data model. The default
-`data-agent` instance keeps the legacy stack names and S3 key layout.
+`data-agent` instance keeps the default stack names and S3 key layout.
 
 For a second database agent:
 
@@ -163,9 +163,8 @@ DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/smoke_test
 `DATA_AGENT_INSTANCE` drives the Runtime stack suffix, target name, manifest
 prefix, per-instance Runtime IAM role name, and smoke-test target selection.
 Override `TARGET_NAME` only if the Gateway target name should differ from the
-instance name. `deploy.sh` lets `infrastructure/runtime.yaml` create the
-Runtime IAM role by default; pass `RUNTIME_ROLE_ARN` only for a deliberate
-legacy/shared-role override.
+instance name. `deploy.sh` always lets `infrastructure/runtime.yaml` create the
+per-instance Runtime IAM role.
 
 Prompts are also per instance. Each Runtime receives its own `CONFIG_KEY`, so
 the `prompts.sql_generation` and `prompts.result_summary` sections in
@@ -383,7 +382,8 @@ IAM-authorized AgentCore Runtime MCP targets. Keep the database target on this
 IAM template.
 
 For OBO targets, keep the capability declaration and the target credential
-provider aligned:
+provider aligned. The JSON below is planning metadata for dedicated OBO
+deployment automation, not input for the database-agent `deploy.sh` path:
 
 ```yaml
 capabilities:
@@ -409,12 +409,14 @@ capabilities:
 }
 ```
 
-`infrastructure/target-mcp-oauth-obo.yaml` is a separate candidate template for
-MCP targets that need AgentCore Identity/outbound authorization. It keeps OBO
-credential-provider configuration out of the database target contract. When a
-target needs more than one OAuth scope, provide `oauth_scopes` as a
-comma-separated value because the CloudFormation parameter is a
-`CommaDelimitedList`.
+`deploy.sh` is intentionally limited to database Runtime targets that use
+`GATEWAY_IAM_ROLE`; it rejects OAUTH/OBO target parameters so an OBO
+configuration cannot silently deploy as an IAM target. `infrastructure/target-mcp-oauth-obo.yaml`
+is a separate candidate template for MCP targets that need AgentCore
+Identity/outbound authorization. It keeps OBO credential-provider configuration
+out of the database target contract. When a target needs more than one OAuth
+scope, provide `OAuthScopes` as a comma-separated CloudFormation parameter
+because the template uses a `CommaDelimitedList`.
 
 Important implementation note: AgentCore Gateway documentation describes
 `TOKEN_EXCHANGE` for OBO targets, while CloudFormation reference material may

@@ -118,13 +118,8 @@ artifact, config, and secret.
 
 The `GatewayTarget` resources do not create separate IAM roles. They use
 `CredentialProviderType: GATEWAY_IAM_ROLE`, so Gateway invokes target Runtime
-endpoints through the shared Gateway role.
-
-`infrastructure/bootstrap.yaml` may still contain the older
-`data-agent-runtime-<environment>` role for compatibility with existing stacks
-or explicit `RuntimeRoleArn` overrides. New deployments should let
-`infrastructure/runtime.yaml` create the per-instance Runtime role instead of
-passing the shared bootstrap role.
+endpoints through the shared Gateway role. Runtime roles are always created by
+`infrastructure/runtime.yaml` and scoped to one deployed Runtime instance.
 
 The database technical role is not created by CloudFormation. It is prepared in
 the target PostgreSQL database using the SQL templates under `postgres/`, then
@@ -579,7 +574,8 @@ flow.
 
 In this repository, `infrastructure/target.yaml` is intentionally limited to
 the default `GATEWAY_IAM_ROLE` credential provider for IAM-authorized AgentCore
-Runtime MCP targets such as the database agent. `infrastructure/target-mcp-oauth-obo.yaml`
+Runtime MCP targets such as the database agent, and `deploy.sh` rejects OAUTH
+target parameters for that path. `infrastructure/target-mcp-oauth-obo.yaml`
 is a separate candidate template for future MCP targets that require OBO.
 OBO targets must be backed by an AgentCore OAuth credential provider ARN,
 requested scopes, and a capability declaration with
@@ -601,7 +597,10 @@ stack that attaches `bedrock-agentcore:GetWorkloadAccessToken`,
 shared Gateway role. This stack should be deployed only for environments that
 host OBO targets.
 
-Example target parameters for an OBO module:
+Example planning metadata for an OBO module. These values are not consumed by
+the database-agent `deploy.sh`; use them with dedicated OBO deployment
+automation or pass the equivalent parameters to
+`infrastructure/target-mcp-oauth-obo.yaml`:
 
 ```json
 {

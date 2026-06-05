@@ -28,7 +28,7 @@ class DataModelConfig(BaseModel):
 class LlmConfig(BaseModel):
     """Runtime model selection and invocation settings."""
 
-    provider: str
+    provider: Literal["bedrock", "openai"]
     model: str
     temperature: float = 0
     timeout_seconds: int = 30

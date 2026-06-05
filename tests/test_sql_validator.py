@@ -68,6 +68,37 @@ def test_accepts_cte_over_authorized_relation() -> None:
     assert result.relations_used == [relation]
 
 
+def test_rejects_write_inside_cte() -> None:
+    relation = relation_name()
+    first_column, _ = relation_columns()
+    try:
+        validate_sql(
+            f"WITH deleted AS (DELETE FROM {relation} RETURNING {first_column}) "
+            f"SELECT {first_column} FROM deleted",
+            config(),
+            max_rows=10,
+        )
+    except SqlValidationError as exc:
+        assert "read_only_expression_required" in str(exc)
+        return
+    raise AssertionError("Expected SqlValidationError")
+
+
+def test_rejects_locking_select() -> None:
+    relation = relation_name()
+    first_column, _ = relation_columns()
+    try:
+        validate_sql(
+            f"SELECT {first_column} FROM {relation} FOR UPDATE",
+            config(),
+            max_rows=10,
+        )
+    except SqlValidationError as exc:
+        assert "read_only_expression_required" in str(exc)
+        return
+    raise AssertionError("Expected SqlValidationError")
+
+
 def test_accepts_configured_function() -> None:
     relation = relation_name()
     first_column, _ = relation_columns()

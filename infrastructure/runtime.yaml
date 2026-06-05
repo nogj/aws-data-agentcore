@@ -11,10 +11,6 @@ Parameters:
     Type: String
   ConfigKey:
     Type: String
-  RuntimeRoleArn:
-    Type: String
-    Default: ""
-    Description: Optional existing runtime role ARN. Leave empty to create a per-runtime role.
   RuntimeRoleName:
     Type: String
     Default: ""
@@ -33,19 +29,16 @@ Parameters:
     Type: String
     Default: ""
     AllowedPattern: "^$|[A-Za-z0-9_]{1,64}"
-    Description: Optional explicit AgentCore runtime name. Leave empty for the legacy per-environment name.
+    Description: Optional explicit AgentCore runtime name. Leave empty for the default per-environment name.
 
 Conditions:
   UseExplicitAgentRuntimeName: !Not [!Equals [!Ref AgentRuntimeName, ""]]
-  UseProvidedRuntimeRole: !Not [!Equals [!Ref RuntimeRoleArn, ""]]
-  CreateRuntimeRole: !Equals [!Ref RuntimeRoleArn, ""]
   UseExplicitRuntimeRoleName: !Not [!Equals [!Ref RuntimeRoleName, ""]]
   UseOpenAISecret: !Not [!Equals [!Ref OpenAISecretArn, ""]]
 
 Resources:
   RuntimeExecutionRole:
     Type: AWS::IAM::Role
-    Condition: CreateRuntimeRole
     Properties:
       RoleName: !If
         - UseExplicitRuntimeRoleName
@@ -129,10 +122,7 @@ Resources:
         NetworkModeConfig:
           Subnets: !Ref PrivateSubnetIds
           SecurityGroups: !Ref RuntimeSecurityGroupIds
-      RoleArn: !If
-        - UseProvidedRuntimeRole
-        - !Ref RuntimeRoleArn
-        - !GetAtt RuntimeExecutionRole.Arn
+      RoleArn: !GetAtt RuntimeExecutionRole.Arn
       EnvironmentVariables:
         APP_ENV: !Ref Environment
         CONFIG_BUCKET: !Ref ArtifactBucketName
@@ -153,7 +143,4 @@ Outputs:
   RuntimeId:
     Value: !GetAtt Runtime.AgentRuntimeId
   RuntimeRoleArn:
-    Value: !If
-      - UseProvidedRuntimeRole
-      - !Ref RuntimeRoleArn
-      - !GetAtt RuntimeExecutionRole.Arn
+    Value: !GetAtt RuntimeExecutionRole.Arn

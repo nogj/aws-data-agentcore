@@ -17,6 +17,28 @@ class ValidatedSql:
     relations_used: list[str]
 
 
+FORBIDDEN_EXPRESSIONS = (
+    exp.Alter,
+    exp.Cache,
+    exp.Command,
+    exp.Copy,
+    exp.Create,
+    exp.Delete,
+    exp.Describe,
+    exp.Drop,
+    exp.Grant,
+    exp.Insert,
+    exp.Lock,
+    exp.Merge,
+    exp.Pragma,
+    exp.Set,
+    exp.Transaction,
+    exp.Uncache,
+    exp.Update,
+    exp.Use,
+)
+
+
 def validate_sql(candidate: str, config: AppConfig, max_rows: int) -> ValidatedSql:
     """Parse, authorize, and bound a read-only query for the configured dialect."""
 
@@ -31,6 +53,10 @@ def validate_sql(candidate: str, config: AppConfig, max_rows: int) -> ValidatedS
     statement = statements[0]
     if not isinstance(statement, exp.Select):
         raise SqlValidationError("read_only_select_required")
+    for forbidden in statement.find_all(*FORBIDDEN_EXPRESSIONS):
+        raise SqlValidationError(
+            f"read_only_expression_required:{forbidden.key or type(forbidden).__name__}"
+        )
     if statement.args.get("into"):
         raise SqlValidationError("select_into_not_allowed")
 

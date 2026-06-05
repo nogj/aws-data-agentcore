@@ -81,55 +81,6 @@ Resources:
               Bool:
                 aws:SecureTransport: "false"
 
-  RuntimeRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "data-agent-runtime-${Environment}"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: bedrock-agentcore.amazonaws.com
-            Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                aws:SourceAccount: !Ref AWS::AccountId
-              ArnLike:
-                aws:SourceArn: !Sub "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:*"
-      Policies:
-        - PolicyName: RuntimeMinimumAccess
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Sid: ReadAgentArtifactsAndConfig
-                Effect: Allow
-                Action: [s3:GetObject, s3:GetObjectVersion]
-                Resource: !Sub "${ArtifactBucket.Arn}/*"
-              - Sid: ReadRuntimeSecrets
-                Effect: Allow
-                Action: secretsmanager:GetSecretValue
-                Resource:
-                  - !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/data-agent/${Environment}/*"
-              - Sid: InvokeBedrockModels
-                Effect: Allow
-                Action:
-                  - bedrock:InvokeModel
-                  - bedrock:InvokeModelWithResponseStream
-                Resource: "*"
-              - Sid: WriteLogs
-                Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:DescribeLogStreams
-                  - logs:PutLogEvents
-                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*"
-              - Sid: DescribeLogGroups
-                Effect: Allow
-                Action: logs:DescribeLogGroups
-                Resource: "*"
-
   GatewayRole:
     Type: AWS::IAM::Role
     Properties:
@@ -330,8 +281,6 @@ Resources:
 Outputs:
   ArtifactBucketName:
     Value: !Ref ArtifactBucket
-  RuntimeRoleArn:
-    Value: !GetAtt RuntimeRole.Arn
   GatewayIdentifier:
     Value: !Ref Gateway
   GatewayUrl:

@@ -74,7 +74,6 @@ aws cloudformation deploy \
     ArtifactBucketName="${BUCKET}" \
     ArtifactKey="${ARTIFACT_KEY}" \
     ConfigKey="${CONFIG_KEY}" \
-    RuntimeRoleArn="${RUNTIME_ROLE_ARN:-}" \
     RuntimeRoleName="${RUNTIME_ROLE_NAME}" \
     DatabaseSecretArn="$(read_agent_param database_secret_arn)" \
     OpenAISecretArn="$(read_optional_agent_param openai_secret_arn)" \

@@ -85,24 +85,26 @@ def _validate_authorization_config(authorization: dict[str, Any]) -> None:
 
 
 def _validate_target_credential_config(parameters: dict[str, Any]) -> None:
-    """Validate outbound credential provider parameters for a Gateway target."""
+    """Validate the database agent target credential contract used by deploy.sh."""
 
     provider_type = parameters.get("target_credential_provider_type", "GATEWAY_IAM_ROLE")
-    if provider_type not in {"GATEWAY_IAM_ROLE", "OAUTH"}:
+    if provider_type != "GATEWAY_IAM_ROLE":
         raise SystemExit(
-            "target_credential_provider_type must be GATEWAY_IAM_ROLE or OAUTH"
+            "deploy.sh supports only GATEWAY_IAM_ROLE database targets; deploy OAUTH/OBO "
+            "targets with infrastructure/target-mcp-oauth-obo.yaml or dedicated automation"
         )
-    if provider_type == "OAUTH":
-        if not parameters.get("oauth_provider_arn"):
-            raise SystemExit("oauth_provider_arn is required for OAUTH targets")
-        if not parameters.get("oauth_scopes"):
-            raise SystemExit("oauth_scopes is required for OAUTH targets")
-        grant_type = parameters.get("oauth_grant_type", "TOKEN_EXCHANGE")
-        if grant_type not in {"TOKEN_EXCHANGE", "AUTHORIZATION_CODE", "CLIENT_CREDENTIALS"}:
-            raise SystemExit(
-                "oauth_grant_type must be TOKEN_EXCHANGE, AUTHORIZATION_CODE, "
-                "or CLIENT_CREDENTIALS"
-            )
+    oauth_parameters = {
+        "oauth_default_return_url",
+        "oauth_grant_type",
+        "oauth_provider_arn",
+        "oauth_scopes",
+    }
+    configured = sorted(key for key in oauth_parameters if parameters.get(key))
+    if configured:
+        raise SystemExit(
+            "OAUTH target parameters are not used by deploy.sh for database targets: "
+            + ", ".join(configured)
+        )
 
 
 def main() -> None:
@@ -184,6 +186,8 @@ def main() -> None:
 
     region = parameters.get("region", "")
     provider = config.get("llm", {}).get("provider")
+    if provider not in {"bedrock", "openai"}:
+        raise SystemExit("llm.provider must be either bedrock or openai")
     model = config.get("llm", {}).get("bedrock_model_id") or config.get("llm", {}).get(
         "model", ""
     )
