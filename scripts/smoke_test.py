@@ -42,8 +42,14 @@ def _assert_no_error(payload: dict[str, Any]) -> None:
         raise RuntimeError(json.dumps(payload["error"], ensure_ascii=False))
 
 
-def _find_tool_name(payload: dict[str, Any]) -> str:
+def _find_tool_name(payload: dict[str, Any], target_name: str | None = None) -> str:
     tools = payload.get("result", {}).get("tools", [])
+    if target_name:
+        expected = f"{target_name}___ask_database"
+        for tool in tools:
+            name = tool.get("name", "")
+            if name == expected:
+                return name
     for tool in tools:
         name = tool.get("name", "")
         if name == "ask_database" or name.endswith("___ask_database"):
@@ -71,6 +77,7 @@ def main() -> None:
     parser.add_argument("--gateway-url", required=True)
     parser.add_argument("--token", required=True)
     parser.add_argument("--question", required=True)
+    parser.add_argument("--target-name")
     args = parser.parse_args()
 
     listed = _post(
@@ -79,7 +86,7 @@ def main() -> None:
         {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
     )
     _assert_no_error(listed)
-    tool_name = _find_tool_name(listed)
+    tool_name = _find_tool_name(listed, args.target_name)
 
     called = _post(
         args.gateway_url,

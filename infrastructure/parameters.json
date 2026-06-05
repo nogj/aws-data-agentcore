@@ -6,5 +6,17 @@
   "required_scope": "data:read",
   "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/prod/database-REPLACE",
   "private_subnet_ids": "subnet-REPLACE1,subnet-REPLACE2",
-  "runtime_security_group_ids": "sg-REPLACE"
+  "runtime_security_group_ids": "sg-REPLACE",
+  "agents": {
+    "cmdb": {
+      "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/prod/cmdb-REPLACE",
+      "private_subnet_ids": "subnet-REPLACE1,subnet-REPLACE2",
+      "runtime_security_group_ids": "sg-REPLACE"
+    },
+    "assets": {
+      "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/prod/assets-REPLACE",
+      "private_subnet_ids": "subnet-REPLACE1,subnet-REPLACE2",
+      "runtime_security_group_ids": "sg-REPLACE"
+    }
+  }
 }

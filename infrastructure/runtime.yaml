@@ -22,12 +22,23 @@ Parameters:
     Type: List<AWS::EC2::Subnet::Id>
   RuntimeSecurityGroupIds:
     Type: List<AWS::EC2::SecurityGroup::Id>
+  AgentRuntimeName:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|[A-Za-z0-9_]{1,64}"
+    Description: Optional explicit AgentCore runtime name. Leave empty for the legacy per-environment name.
+
+Conditions:
+  UseExplicitAgentRuntimeName: !Not [!Equals [!Ref AgentRuntimeName, ""]]
 
 Resources:
   Runtime:
     Type: AWS::BedrockAgentCore::Runtime
     Properties:
-      AgentRuntimeName: !Sub "read_only_data_agent_${Environment}"
+      AgentRuntimeName: !If
+        - UseExplicitAgentRuntimeName
+        - !Ref AgentRuntimeName
+        - !Sub "read_only_data_agent_${Environment}"
       Description: Stateless read-only database MCP server.
       AgentRuntimeArtifact:
         CodeConfiguration:

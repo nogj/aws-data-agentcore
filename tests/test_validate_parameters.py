@@ -1,5 +1,7 @@
 from scripts.validate_parameters import (
     _contains_placeholder,
+    _deployment_parameters,
+    _placeholder_keys,
     _validate_authorization_config,
 )
 
@@ -10,6 +12,30 @@ def test_detects_nested_deployment_marker() -> None:
 
 def test_accepts_completed_parameters() -> None:
     assert not _contains_placeholder({"value": ["ready", "configured"]})
+
+
+def test_agent_overrides_top_level_parameters() -> None:
+    parameters = {
+        "database_secret_arn": "REPLACE",
+        "agents": {"cmdb": {"database_secret_arn": "secret"}},
+    }
+
+    merged = _deployment_parameters(parameters, "cmdb")
+
+    assert merged["database_secret_arn"] == "secret"
+
+
+def test_placeholder_check_ignores_other_agent_overrides() -> None:
+    parameters = {
+        "region": "eu-west-1",
+        "database_secret_arn": "top-level-secret",
+        "agents": {
+            "cmdb": {"database_secret_arn": "cmdb-secret"},
+            "assets": {"database_secret_arn": "REPLACE-assets"},
+        },
+    }
+
+    assert _placeholder_keys(parameters, "cmdb") == []
 
 
 def test_scopes_mode_rejects_roles_claim() -> None:

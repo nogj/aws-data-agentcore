@@ -50,16 +50,26 @@ def main() -> None:
     parser.add_argument("--environment", required=True)
     parser.add_argument("--region", required=True)
     parser.add_argument("--runtime-stack")
+    parser.add_argument("--instance", default="data-agent")
     parser.add_argument("--keep-manifests", type=int, default=10)
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
 
     s3 = boto3.client("s3")
     cloudformation = boto3.client("cloudformation", region_name=args.region)
-    runtime_stack = args.runtime_stack or f"data-agent-runtime-{args.environment}"
-    manifest_prefix = f"manifests/{args.environment}/data-agent-"
+    stack_suffix = "" if args.instance == "data-agent" else f"-{args.instance}"
+    runtime_stack = args.runtime_stack or f"data-agent-runtime-{args.environment}{stack_suffix}"
+    if args.instance == "data-agent":
+        manifest_prefix = f"manifests/{args.environment}/data-agent-"
+        active_key = f"manifests/{args.environment}/active.json"
+        artifact_prefix = f"artifacts/{args.environment}/data-agent-"
+        config_prefix = f"config/{args.environment}/data-agent-"
+    else:
+        manifest_prefix = f"manifests/{args.environment}/{args.instance}/data-agent-"
+        active_key = f"manifests/{args.environment}/{args.instance}/active.json"
+        artifact_prefix = f"artifacts/{args.environment}/{args.instance}/"
+        config_prefix = f"config/{args.environment}/{args.instance}/"
     manifest_keys = sorted(_list_keys(s3, args.bucket, manifest_prefix), reverse=True)
-    active_key = f"manifests/{args.environment}/active.json"
     active_manifest = _load_json(s3, args.bucket, active_key)
 
     kept_manifest_keys = set(manifest_keys[: args.keep_manifests])
@@ -75,8 +85,8 @@ def main() -> None:
         kept_artifacts.add(manifest["artifact_key"])
         kept_configs.add(manifest["config_key"])
 
-    all_artifacts = _list_keys(s3, args.bucket, f"artifacts/{args.environment}/")
-    all_configs = _list_keys(s3, args.bucket, f"config/{args.environment}/")
+    all_artifacts = _list_keys(s3, args.bucket, artifact_prefix)
+    all_configs = _list_keys(s3, args.bucket, config_prefix)
     removable_manifests = set(manifest_keys[args.keep_manifests :])
     removable = (
         (all_artifacts - kept_artifacts)

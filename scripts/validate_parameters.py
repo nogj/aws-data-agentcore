@@ -18,6 +18,36 @@ def _contains_placeholder(value: Any) -> bool:
     return False
 
 
+def _deployment_parameters(parameters: dict[str, Any], instance: str) -> dict[str, Any]:
+    """Return top-level deployment parameters overlaid with per-agent overrides."""
+
+    agent_overrides = parameters.get("agents", {}).get(instance, {})
+    if not isinstance(agent_overrides, dict):
+        raise SystemExit(f"agents.{instance} must be an object")
+    return {**parameters, **agent_overrides}
+
+
+def _placeholder_keys(parameters: dict[str, Any], instance: str) -> list[str]:
+    """Find placeholders relevant to this deployment instance."""
+
+    overridable = {
+        "database_secret_arn",
+        "openai_secret_arn",
+        "private_subnet_ids",
+        "runtime_security_group_ids",
+    }
+    visible_parameters = _deployment_parameters(parameters, instance)
+    invalid: list[str] = []
+    for key, value in visible_parameters.items():
+        if key == "agents":
+            continue
+        if key in overridable and key in parameters.get("agents", {}).get(instance, {}):
+            value = parameters["agents"][instance][key]
+        if _contains_placeholder(value):
+            invalid.append(key)
+    return sorted(invalid)
+
+
 def _validate_authorization_config(authorization: dict[str, Any]) -> None:
     """Validate that authorization mode and accepted claims cannot drift apart."""
 
@@ -53,14 +83,14 @@ def main() -> None:
     path = Path(sys.argv[1])
     environment = sys.argv[2]
     config_path = Path(sys.argv[3])
+    instance = sys.argv[4] if len(sys.argv) > 4 else "data-agent"
     with path.open(encoding="utf-8") as handle:
-        parameters = json.load(handle)
+        raw_parameters = json.load(handle)
+    parameters = _deployment_parameters(raw_parameters, instance)
     with config_path.open(encoding="utf-8") as handle:
         config = yaml.safe_load(handle)
 
-    invalid = sorted(
-        key for key, value in parameters.items() if _contains_placeholder(value)
-    )
+    invalid = _placeholder_keys(raw_parameters, instance)
     if invalid:
         raise SystemExit(
             f"Deployment parameters still contain REPLACE markers: {', '.join(invalid)}"

@@ -124,6 +124,53 @@ AgentCore AZ support, service endpoint access, and database connectivity.
 `ask_database`. Override the safe question with `SMOKE_QUESTION` and the row
 bound with `SMOKE_MAX_ROWS`.
 
+## Multiple Database Agents
+
+The Gateway is shared. Each database agent should be deployed as a separate
+Runtime and GatewayTarget with its own config file, database secret, target
+name, grants, and authorized data model. The default `data-agent` instance keeps
+the legacy stack names and S3 key layout.
+
+For a second database agent:
+
+```bash
+./scripts/build.sh
+DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/publish.sh prod
+export ARTIFACT_KEY=artifacts/prod/cmdb/data-agent-REPLACE.zip
+export CONFIG_KEY=config/prod/cmdb/data-agent-REPLACE.yaml
+DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/deploy.sh prod
+DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/smoke_test.sh prod
+```
+
+`DATA_AGENT_INSTANCE` drives the Runtime stack suffix, target name, manifest
+prefix, and smoke-test target selection. Override `TARGET_NAME` only if the
+Gateway target name should differ from the instance name.
+
+Per-agent infrastructure settings can live under `agents` in the parameter
+file. Agent-specific values override the top-level defaults:
+
+```json
+{
+  "region": "eu-west-1",
+  "artifact_bucket_name": "corp-data-agent-artifacts",
+  "jwt_discovery_url": "https://login.example/.well-known/openid-configuration",
+  "jwt_allowed_audience": "api://data-agent",
+  "required_scope": "data:read",
+  "agents": {
+    "cmdb": {
+      "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/prod/cmdb",
+      "private_subnet_ids": "subnet-a,subnet-b",
+      "runtime_security_group_ids": "sg-cmdb"
+    },
+    "assets": {
+      "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/prod/assets",
+      "private_subnet_ids": "subnet-a,subnet-b",
+      "runtime_security_group_ids": "sg-assets"
+    }
+  }
+}
+```
+
 Versioned artifacts and configuration keys are published immutably. Use
 `scripts/cleanup_artifacts.py` to remove keys that are not referenced by the
 active manifest, the retained manifest window, or the currently deployed
