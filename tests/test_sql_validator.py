@@ -1,4 +1,5 @@
 import yaml
+import pytest
 
 from app.config import AppConfig
 from app.capabilities.database.sql_validator import SqlValidationError, validate_sql
@@ -138,5 +139,40 @@ def test_rejects_column_not_authorized_for_qualified_relation() -> None:
             max_rows=10,
         )
     except SqlValidationError:
+        return
+    raise AssertionError("Expected SqlValidationError")
+
+
+@pytest.mark.parametrize(
+    ("sql_template", "expected_reason"),
+    [
+        ("SELECT {column} FROM catalog.{relation}", "catalog_not_allowed"),
+        (
+            "SELECT {column} FROM {relation} TABLESAMPLE SYSTEM (1)",
+            "read_only_expression_required",
+        ),
+        (
+            "SELECT {column} FROM {relation}, LATERAL (SELECT {column}) AS x",
+            "read_only_expression_required",
+        ),
+        (
+            "SELECT x FROM UNNEST(ARRAY[1, 2]) AS t(x)",
+            "read_only_expression_required",
+        ),
+    ],
+)
+def test_rejects_unsupported_read_constructs(
+    sql_template: str, expected_reason: str
+) -> None:
+    relation = relation_name()
+    first_column, _ = relation_columns()
+    try:
+        validate_sql(
+            sql_template.format(relation=relation, column=first_column),
+            config(),
+            max_rows=10,
+        )
+    except SqlValidationError as exc:
+        assert expected_reason in str(exc)
         return
     raise AssertionError("Expected SqlValidationError")

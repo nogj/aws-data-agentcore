@@ -32,10 +32,14 @@ FORBIDDEN_EXPRESSIONS = (
     exp.Merge,
     exp.Pragma,
     exp.Set,
+    exp.TableSample,
     exp.Transaction,
     exp.Uncache,
+    exp.Unnest,
     exp.Update,
     exp.Use,
+    exp.Lateral,
+    exp.Pivot,
 )
 
 
@@ -75,6 +79,8 @@ def validate_sql(candidate: str, config: AppConfig, max_rows: int) -> ValidatedS
     relations_used: list[str] = []
     relation_by_qualifier: dict[str, str] = {}
     for table in statement.find_all(exp.Table):
+        if table.catalog:
+            raise SqlValidationError(f"catalog_not_allowed:{table.catalog.lower()}")
         relation_name = ".".join(part for part in [table.db, table.name] if part).lower()
         if not table.db and relation_name in cte_aliases:
             continue
