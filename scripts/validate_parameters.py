@@ -97,10 +97,11 @@ def _validate_target_credential_config(parameters: dict[str, Any]) -> None:
             raise SystemExit("oauth_provider_arn is required for OAUTH targets")
         if not parameters.get("oauth_scopes"):
             raise SystemExit("oauth_scopes is required for OAUTH targets")
-        grant_type = parameters.get("oauth_grant_type", "AUTHORIZATION_CODE")
-        if grant_type not in {"AUTHORIZATION_CODE", "CLIENT_CREDENTIALS"}:
+        grant_type = parameters.get("oauth_grant_type", "TOKEN_EXCHANGE")
+        if grant_type not in {"TOKEN_EXCHANGE", "AUTHORIZATION_CODE", "CLIENT_CREDENTIALS"}:
             raise SystemExit(
-                "oauth_grant_type must be AUTHORIZATION_CODE or CLIENT_CREDENTIALS"
+                "oauth_grant_type must be TOKEN_EXCHANGE, AUTHORIZATION_CODE, "
+                "or CLIENT_CREDENTIALS"
             )
 
 

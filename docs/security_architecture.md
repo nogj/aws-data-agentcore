@@ -571,12 +571,35 @@ capabilities:
 
 Targets using `on_behalf_of_user` should receive only the token or context
 required for token exchange and should avoid broad propagation of inbound JWTs.
-In this repository, `infrastructure/target.yaml` supports the default
-`GATEWAY_IAM_ROLE` credential provider and an `OAUTH` credential provider for
-future OBO targets. OBO targets must be backed by an AgentCore OAuth credential
-provider ARN, requested scopes, and a capability declaration with
+For Gateway-managed OBO targets, the inbound user token is consumed by
+Gateway/AgentCore Identity and is not forwarded to the target Runtime as a raw
+bearer token. The target should receive only the Gateway-authorized request and
+the downstream credential context made available by the credential-provider
+flow.
+
+In this repository, `infrastructure/target.yaml` is intentionally limited to
+the default `GATEWAY_IAM_ROLE` credential provider for IAM-authorized AgentCore
+Runtime MCP targets such as the database agent. `infrastructure/target-mcp-oauth-obo.yaml`
+is a separate candidate template for future MCP targets that require OBO.
+OBO targets must be backed by an AgentCore OAuth credential provider ARN,
+requested scopes, and a capability declaration with
 `identity_mode: on_behalf_of_user` and `downstream_audience`.
 Multiple OAuth scopes must be passed as a comma-separated parameter value.
+
+Important implementation note: AgentCore Gateway documentation describes
+`TOKEN_EXCHANGE` for OBO targets, while CloudFormation reference material may
+lag or list only `AUTHORIZATION_CODE` and `CLIENT_CREDENTIALS` for the OAuth
+credential provider grant type. If `TOKEN_EXCHANGE` is not accepted by
+CloudFormation in the target Region/account, deploy OBO targets with the
+AgentCore API/CLI or a custom resource until CloudFormation support is aligned.
+
+OBO targets may require Gateway role permissions for AgentCore Identity token
+vending. `infrastructure/gateway-identity-permissions.yaml` is an optional
+stack that attaches `bedrock-agentcore:GetWorkloadAccessToken`,
+`bedrock-agentcore:GetResourceOauth2Token`, and an optional
+`secretsmanager:GetSecretValue` grant for the credential-provider secret to the
+shared Gateway role. This stack should be deployed only for environments that
+host OBO targets.
 
 Example target parameters for an OBO module:
 
@@ -587,7 +610,7 @@ Example target parameters for an OBO module:
       "target_credential_provider_type": "OAUTH",
       "oauth_provider_arn": "arn:aws:bedrock-agentcore:eu-west-1:111122223333:token-vault/default/oauth2credentialprovider/entra-docs-obo",
       "oauth_scopes": "https://graph.microsoft.com/.default",
-      "oauth_grant_type": "AUTHORIZATION_CODE",
+      "oauth_grant_type": "TOKEN_EXCHANGE",
       "allowed_request_headers": "x-data-agent-grants,x-data-agent-identity"
     }
   }

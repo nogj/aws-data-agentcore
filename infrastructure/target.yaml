@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: AgentCore Gateway target for the read-only data agent.
+Description: AgentCore Gateway target for IAM-authorized AgentCore Runtime MCP servers.
 
 Parameters:
   GatewayIdentifier:
@@ -15,30 +15,6 @@ Parameters:
   AllowedRequestHeaders:
     Type: CommaDelimitedList
     Default: "x-data-agent-grants,x-data-agent-identity"
-  CredentialProviderType:
-    Type: String
-    Default: GATEWAY_IAM_ROLE
-    AllowedValues: [GATEWAY_IAM_ROLE, OAUTH]
-    Description: Outbound authorization mode for this target.
-  OAuthProviderArn:
-    Type: String
-    Default: ""
-    Description: AgentCore OAuth credential provider ARN for OBO/OAuth targets.
-  OAuthScopes:
-    Type: CommaDelimitedList
-    Default: ""
-    Description: OAuth scopes requested by an OBO/OAuth target.
-  OAuthGrantType:
-    Type: String
-    Default: AUTHORIZATION_CODE
-    AllowedValues: [AUTHORIZATION_CODE, CLIENT_CREDENTIALS]
-  OAuthDefaultReturnUrl:
-    Type: String
-    Default: ""
-
-Conditions:
-  UseOAuthCredentialProvider: !Equals [!Ref CredentialProviderType, OAUTH]
-  UseOAuthDefaultReturnUrl: !Not [!Equals [!Ref OAuthDefaultReturnUrl, ""]]
 
 Resources:
   GatewayTarget:
@@ -54,23 +30,11 @@ Resources:
           McpServer:
             Endpoint: !Ref RuntimeEndpointUrl
       CredentialProviderConfigurations:
-        Fn::If:
-          - UseOAuthCredentialProvider
-          - - CredentialProviderType: OAUTH
-              CredentialProvider:
-                OauthCredentialProvider:
-                  ProviderArn: !Ref OAuthProviderArn
-                  Scopes: !Ref OAuthScopes
-                  GrantType: !Ref OAuthGrantType
-                  DefaultReturnUrl: !If
-                    - UseOAuthDefaultReturnUrl
-                    - !Ref OAuthDefaultReturnUrl
-                    - !Ref AWS::NoValue
-          - - CredentialProviderType: GATEWAY_IAM_ROLE
-              CredentialProvider:
-                IamCredentialProvider:
-                  Service: bedrock-agentcore
-                  Region: !Ref AWS::Region
+        - CredentialProviderType: GATEWAY_IAM_ROLE
+          CredentialProvider:
+            IamCredentialProvider:
+              Service: bedrock-agentcore
+              Region: !Ref AWS::Region
 
 Outputs:
   GatewayTargetId:

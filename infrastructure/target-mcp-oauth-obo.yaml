@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Candidate Gateway target for MCP servers that require OAuth/OBO outbound authorization.
+
+Parameters:
+  GatewayIdentifier:
+    Type: String
+  TargetName:
+    Type: String
+  TargetDescription:
+    Type: String
+    Default: MCP target using OAuth/OBO outbound authorization.
+  RuntimeEndpointUrl:
+    Type: String
+  AllowedRequestHeaders:
+    Type: CommaDelimitedList
+    Default: "x-data-agent-grants,x-data-agent-identity"
+  OAuthProviderArn:
+    Type: String
+    Description: AgentCore Identity OAuth credential provider ARN.
+  OAuthScopes:
+    Type: CommaDelimitedList
+    Description: OAuth scopes requested by the OBO target.
+  OAuthGrantType:
+    Type: String
+    Default: TOKEN_EXCHANGE
+    AllowedValues: [TOKEN_EXCHANGE, AUTHORIZATION_CODE, CLIENT_CREDENTIALS]
+  OAuthDefaultReturnUrl:
+    Type: String
+    Default: ""
+
+Conditions:
+  UseOAuthDefaultReturnUrl: !Not [!Equals [!Ref OAuthDefaultReturnUrl, ""]]
+
+Resources:
+  GatewayTarget:
+    Type: AWS::BedrockAgentCore::GatewayTarget
+    Properties:
+      GatewayIdentifier: !Ref GatewayIdentifier
+      Name: !Ref TargetName
+      Description: !Ref TargetDescription
+      MetadataConfiguration:
+        AllowedRequestHeaders: !Ref AllowedRequestHeaders
+      TargetConfiguration:
+        Mcp:
+          McpServer:
+            Endpoint: !Ref RuntimeEndpointUrl
+      CredentialProviderConfigurations:
+        - CredentialProviderType: OAUTH
+          CredentialProvider:
+            OAuthCredentialProvider:
+              ProviderArn: !Ref OAuthProviderArn
+              Scopes: !Ref OAuthScopes
+              GrantType: !Ref OAuthGrantType
+              DefaultReturnUrl: !If
+                - UseOAuthDefaultReturnUrl
+                - !Ref OAuthDefaultReturnUrl
+                - !Ref AWS::NoValue
+
+Outputs:
+  GatewayTargetId:
+    Value: !GetAtt GatewayTarget.TargetId

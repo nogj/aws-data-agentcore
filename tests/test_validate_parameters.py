@@ -56,7 +56,7 @@ def test_accepts_oauth_target_config() -> None:
             "target_credential_provider_type": "OAUTH",
             "oauth_provider_arn": "arn:aws:bedrock-agentcore:eu-west-1:111122223333:token-vault/default/oauth2credentialprovider/docs",
             "oauth_scopes": "docs.read,offline_access",
-            "oauth_grant_type": "AUTHORIZATION_CODE",
+            "oauth_grant_type": "TOKEN_EXCHANGE",
         }
     )
 

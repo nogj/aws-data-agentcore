@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Optional Gateway role permissions for AgentCore Identity OBO targets.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, pre, prod]
+  OAuthCredentialSecretArn:
+    Type: String
+    Default: ""
+    Description: Optional Secrets Manager ARN backing the OAuth credential provider.
+
+Conditions:
+  UseOAuthCredentialSecret: !Not [!Equals [!Ref OAuthCredentialSecretArn, ""]]
+
+Resources:
+  GatewayIdentityPermissions:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "data-agent-gateway-identity-${Environment}"
+      Roles:
+        - !Sub "data-agent-gateway-${Environment}"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ObtainAgentCoreIdentityTokens
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:GetWorkloadAccessToken
+              - bedrock-agentcore:GetResourceOauth2Token
+            Resource: "*"
+          - !If
+            - UseOAuthCredentialSecret
+            - Sid: ReadOAuthCredentialProviderSecret
+              Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref OAuthCredentialSecretArn
+            - !Ref AWS::NoValue

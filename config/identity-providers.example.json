@@ -11,7 +11,7 @@
       "scopes": [
         "https://graph.microsoft.com/.default"
       ],
-      "grant_type": "AUTHORIZATION_CODE",
+      "grant_type": "TOKEN_EXCHANGE",
       "allowed_request_headers": [
         "x-data-agent-grants",
         "x-data-agent-identity"
@@ -29,7 +29,7 @@
         "tickets.read",
         "tickets.write"
       ],
-      "grant_type": "AUTHORIZATION_CODE",
+      "grant_type": "TOKEN_EXCHANGE",
       "allowed_request_headers": [
         "x-data-agent-grants",
         "x-data-agent-identity"

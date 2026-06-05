@@ -378,9 +378,9 @@ allowlists `x-data-agent-grants` and `x-data-agent-identity`; future OBO targets
 should have their own GatewayTarget metadata and credential-provider
 configuration rather than broadening this target's contract.
 `infrastructure/target.yaml` is parameterized with
-`TargetName`, `TargetDescription`, `AllowedRequestHeaders`, and outbound
-credential-provider settings so the same template can be reused for additional
-Gateway targets with narrower header contracts.
+`TargetName`, `TargetDescription`, and `AllowedRequestHeaders` for
+IAM-authorized AgentCore Runtime MCP targets. Keep the database target on this
+IAM template.
 
 For OBO targets, keep the capability declaration and the target credential
 provider aligned:
@@ -402,19 +402,33 @@ capabilities:
       "target_credential_provider_type": "OAUTH",
       "oauth_provider_arn": "arn:aws:bedrock-agentcore:eu-west-1:111122223333:token-vault/default/oauth2credentialprovider/entra-docs-obo",
       "oauth_scopes": "https://graph.microsoft.com/.default",
-      "oauth_grant_type": "AUTHORIZATION_CODE",
+      "oauth_grant_type": "TOKEN_EXCHANGE",
       "allowed_request_headers": "x-data-agent-grants,x-data-agent-identity"
     }
   }
 }
 ```
 
-`GATEWAY_IAM_ROLE` remains the default for AgentCore-hosted MCP Runtime
-targets, including the database agent. Use `OAUTH` only for targets that need
-AgentCore Identity/outbound authorization or an equivalent approved OBO
-credential provider. When a target needs more than one OAuth scope, provide
-`oauth_scopes` as a comma-separated value because the CloudFormation parameter
-is a `CommaDelimitedList`.
+`infrastructure/target-mcp-oauth-obo.yaml` is a separate candidate template for
+MCP targets that need AgentCore Identity/outbound authorization. It keeps OBO
+credential-provider configuration out of the database target contract. When a
+target needs more than one OAuth scope, provide `oauth_scopes` as a
+comma-separated value because the CloudFormation parameter is a
+`CommaDelimitedList`.
+
+Important implementation note: AgentCore Gateway documentation describes
+`TOKEN_EXCHANGE` for OBO targets, while CloudFormation reference material may
+lag or list only `AUTHORIZATION_CODE` and `CLIENT_CREDENTIALS` for the OAuth
+credential provider grant type. If `TOKEN_EXCHANGE` is not accepted by
+CloudFormation in the target Region/account, deploy OBO targets with the
+AgentCore API/CLI or a custom resource until CloudFormation support is aligned.
+The database agent does not depend on this path.
+
+OBO targets may also require additional Gateway role permissions for AgentCore
+Identity token vending. Use `infrastructure/gateway-identity-permissions.yaml`
+only when deploying OBO targets; it attaches `GetWorkloadAccessToken`,
+`GetResourceOauth2Token`, and an optional credential-provider secret read grant
+to the shared Gateway role. Do not deploy it for database-only environments.
 
 ## Data Governance
 
