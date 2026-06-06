@@ -335,6 +335,10 @@ authorization:
   accepted_claims: [roles]
 ```
 
+See [Microsoft Entra ID Setup Guide](docs/entra_id_setup.md) for a practical
+two-app configuration guide with scopes, consent, token validation, and smoke
+testing.
+
 Changing `authorization.mode` or `accepted_claims` affects the Gateway
 interceptor environment and requires redeploying the bootstrap stack, not only
 publishing a new S3 configuration file.

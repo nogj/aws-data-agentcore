@@ -202,6 +202,9 @@ When using the Entra v2 discovery document:
 - use `az login --allow-no-subscriptions` for tenant-only validation accounts
   that do not have Azure subscriptions.
 
+The practical two-app Entra setup is documented in
+`docs/entra_id_setup.md`.
+
 The hub configuration defines how inbound claims are interpreted before
 module-specific policy is applied:
 
