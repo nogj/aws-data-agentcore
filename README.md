@@ -142,6 +142,20 @@ AgentCore AZ support, service endpoint access, and database connectivity.
 `ask_database`. Override the safe question with `SMOKE_QUESTION` and the row
 bound with `SMOKE_MAX_ROWS`.
 
+For manual validation, use the interactive CLI against the deployed Gateway:
+
+```bash
+export BEARER_TOKEN="$(az account get-access-token \
+  --tenant REPLACE_TENANT_ID \
+  --scope api://REPLACE_API_APP_ID/data:read \
+  --query accessToken \
+  --output tsv)"
+./scripts/agent_cli.sh prod
+```
+
+The CLI opens one MCP session, reuses it for questions, and closes it on exit.
+Use `:help` inside the prompt to list local commands.
+
 ## Multiple Database Agents
 
 The Gateway is shared. Each database agent should be deployed as a separate

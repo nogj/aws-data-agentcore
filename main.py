@@ -15,6 +15,7 @@ from app.authorization import (
 )
 from app.audit import emit
 from app.capabilities.database.database import execute_read_only_sql
+from app.capabilities.database.llm import generate_sql, summarize_results
 from app.capabilities.database.models import AskDatabaseRequest, AskDatabaseResponse
 from app.capabilities.database.security import (
     has_scope,
@@ -104,7 +105,23 @@ async def ask_database(
 
     started = time.perf_counter()
     trace_id = str(uuid.uuid4())
+    phase_timings_ms: dict[str, int] = {}
+
+    async def timed_phase(name: str, operation: Any) -> Any:
+        phase_started = time.perf_counter()
+        try:
+            if callable(operation):
+                value = operation()
+            else:
+                value = operation
+            if hasattr(value, "__await__"):
+                return await value
+            return value
+        finally:
+            phase_timings_ms[name] = int((time.perf_counter() - phase_started) * 1000)
+
     config = load_config()
+    phase_timings_ms["config_load_ms"] = int((time.perf_counter() - started) * 1000)
     capability = config.capability("ask_database")
 
     def response(**kwargs: Any) -> dict[str, Any]:
@@ -113,41 +130,57 @@ async def ask_database(
         return AskDatabaseResponse(trace_id=trace_id, elapsed_ms=elapsed_ms, **kwargs).model_dump()
 
     try:
-        request = AskDatabaseRequest(
-            question=question,
-            max_rows=max_rows,
-            include_sql=include_sql,
-            context=context,
+        request = await timed_phase(
+            "request_validation_ms",
+            lambda: AskDatabaseRequest(
+                question=question,
+                max_rows=max_rows,
+                include_sql=include_sql,
+                context=context,
+            ),
         )
-        grants, caller = _trusted_gateway_context(ctx, _gateway_header_secret())
+        grants, caller = await timed_phase(
+            "authorization_ms",
+            lambda: _trusted_gateway_context(ctx, _gateway_header_secret()),
+        )
         # Authorization must fail closed if the trusted Gateway scope header is absent.
         if not all(has_scope(grants, grant) for grant in capability.required_grants):
             raise PermissionError("missing_required_scope")
         validate_question(request.question, config)
         validate_context(request.context, config)
         async with asyncio.timeout(config.query.timeout_seconds):
-            from app.capabilities.database.llm import generate_sql, summarize_results
-
             bounded_rows = min(
                 request.max_rows or config.query.default_max_rows,
                 config.query.absolute_max_rows,
             )
             # LLM output is always treated as untrusted until validate_sql succeeds.
-            candidate = await generate_sql(
-                config, request.question, bounded_rows, request.context
+            candidate = await timed_phase(
+                "sql_generation_ms",
+                generate_sql(config, request.question, bounded_rows, request.context),
             )
-            validated = validate_sql(candidate.sql, config, bounded_rows)
-            result = await execute_read_only_sql(validated.sql, config)
-            rows = normalize_rows(result.rows, config)
-            summary_rows, summary_truncated = _summary_input(
-                rows, len(result.rows), config
+            validated = await timed_phase(
+                "sql_validation_ms",
+                lambda: validate_sql(candidate.sql, config, bounded_rows),
             )
-            summary = await summarize_results(
-                config,
-                request.question,
-                summary_rows,
-                candidate.assumptions,
-                truncated=summary_truncated,
+            result = await timed_phase(
+                "database_ms",
+                execute_read_only_sql(validated.sql, config),
+            )
+            rows = await timed_phase(
+                "result_normalization_ms", lambda: normalize_rows(result.rows, config)
+            )
+            summary_rows, summary_truncated = await timed_phase(
+                "summary_input_ms", lambda: _summary_input(rows, len(result.rows), config)
+            )
+            summary = await timed_phase(
+                "result_summary_ms",
+                summarize_results(
+                    config,
+                    request.question,
+                    summary_rows,
+                    candidate.assumptions,
+                    truncated=summary_truncated,
+                ),
             )
         can_show_sql = request.include_sql and (
             config.query.allow_sql_by_default
@@ -165,6 +198,7 @@ async def ask_database(
             relations=validated.relations_used,
             row_count=len(rows),
             elapsed_ms=int((time.perf_counter() - started) * 1000),
+            timings_ms=phase_timings_ms,
             identity_mode=capability.identity_mode,
             **caller.audit_fields(),
         )

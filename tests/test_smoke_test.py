@@ -1,5 +1,6 @@
 import json
 
+from scripts.agent_cli import _format_tool_result
 from scripts.smoke_test import _contains_ok_status, _find_tool_name, _read_response
 
 
@@ -38,3 +39,29 @@ def test_detects_nested_tool_status() -> None:
     payload = {"result": {"content": [{"text": '{"status": "ok"}'}]}}
 
     assert _contains_ok_status(payload)
+
+
+def test_formats_agent_cli_tool_result() -> None:
+    response = {
+        "result": {
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "status": "ok",
+                            "answer": "payments-postgres is critical.",
+                            "sql": "SELECT name FROM agent_cmdb.cis",
+                            "row_count": 1,
+                            "relations_used": ["agent_cmdb.cis"],
+                        }
+                    )
+                }
+            ]
+        }
+    }
+
+    formatted = _format_tool_result(response)
+
+    assert "payments-postgres is critical." in formatted
+    assert "SELECT name FROM agent_cmdb.cis" in formatted
+    assert "rows=1" in formatted
