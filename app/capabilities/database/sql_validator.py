@@ -115,6 +115,8 @@ def validate_sql(candidate: str, config: AppConfig, max_rows: int) -> ValidatedS
         function.lower() for function in config.data_model.allowed_functions
     }
     for function in statement.find_all(exp.Func):
+        if isinstance(function, exp.Connector):
+            continue
         function_name = function.sql_name().lower()
         if function_name not in allowed_functions:
             raise SqlValidationError(f"function_not_allowed:{function_name}")

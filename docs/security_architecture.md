@@ -186,6 +186,22 @@ The Gateway uses `CUSTOM_JWT` authorization. The deployment parameters define:
 - `jwt_allowed_audience`
 - `required_scope`
 
+`jwt_allowed_audience` must match the exact `aud` claim in an access token
+issued by the IdP, not a guessed resource identifier. For Microsoft Entra ID
+delegated v2 flows, callers may request a scope such as
+`api://<api-app-id>/data:read` while Entra emits the bare API application client
+ID as `aud`. Decode and verify a real token before deploying Gateway
+authorization parameters.
+
+When using the Entra v2 discovery document:
+
+- configure the API app registration with `api.requestedAccessTokenVersion = 2`;
+- use `https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration`;
+- verify that the token contains `ver: "2.0"`, expected `iss`, expected `aud`,
+  and the required `scp` or `roles` claim;
+- use `az login --allow-no-subscriptions` for tenant-only validation accounts
+  that do not have Azure subscriptions.
+
 The hub configuration defines how inbound claims are interpreted before
 module-specific policy is applied:
 
@@ -482,11 +498,25 @@ should be deployed with their own least-privilege network posture. Recommended
 supporting controls include:
 
 - private database routing;
-- VPC endpoints for S3, Secrets Manager, and Bedrock where possible;
+- VPC endpoints for S3, Secrets Manager, Bedrock Runtime, and CloudWatch Logs
+  where possible;
 - NAT only when an approved external provider is required;
 - database connection limits for the technical role;
 - read replica usage for analytical traffic;
 - CloudWatch log retention aligned with data governance policy.
+
+A public subnet route to an Internet Gateway is not sufficient egress for an
+AgentCore Runtime attached to the VPC unless the managed runtime is explicitly
+given public egress by the service. The low-cost validation posture avoids NAT
+by using private endpoints for the AWS services needed during `tools/call`:
+Secrets Manager for the database URI, Bedrock Runtime for model invocation, S3
+for artifacts/config, and CloudWatch Logs for observability.
+
+The Runtime should keep startup lightweight. Provider libraries may be imported
+or initialized lazily on first tool invocation, but no model weights are loaded
+locally. The startup contract should be fast enough for Gateway target
+initialization and MCP `tools/list`; expensive provider calls belong in
+capability execution paths such as `tools/call`.
 
 ## Observability And Audit
 
@@ -629,6 +659,8 @@ The architecture mitigates:
 - unauthenticated access to the Gateway;
 - client-forged grant headers;
 - missing or incorrect JWT audience;
+- token-version and issuer mismatches between IdP configuration and Gateway
+  discovery URL;
 - accidental cross-module reuse of the database target header contract;
 - accidental LLM-generated write SQL;
 - multi-statement SQL injection;
@@ -651,6 +683,8 @@ The architecture still requires operational hardening:
 - Prompt injection can still influence answer wording, even though SQL execution
   is validated.
 - Redaction depends on configured patterns and approved view design.
+- VPC endpoint policy and security-group drift can break model, secret, or log
+  access without changing application code.
 - OBO targets require separate AgentCore Identity or IdP credential-provider
   configuration before they are safe to expose.
 - Knowledge-base and non-SQL modules require their own deterministic guardrails;
@@ -664,6 +698,8 @@ Recommended production controls:
 - database monitoring for the technical role;
 - explicit security-barrier views where available;
 - regular review of allowed relations and columns;
+- smoke tests that cover both MCP `tools/list` and `tools/call` with the
+  current supported MCP protocol version;
 - CI checks for configuration drift and placeholder parameters.
 
 ## Design Decisions
@@ -679,6 +715,12 @@ Current accepted decisions:
 - Propagate only bounded caller identity claims, not the raw inbound JWT.
 - Use SQLGlot for deterministic SQL validation.
 - Treat LLM output as untrusted until validated.
+- Require MCP clients and smoke tests to send the currently supported
+  `MCP-Protocol-Version` header. The validated AgentCore Gateway version is
+  `2025-06-18`.
+- Use the exact IdP token `aud` claim as `jwt_allowed_audience`.
+- Prefer private VPC endpoints over NAT for low-cost validation when the
+  Runtime only needs AWS service egress.
 - Prepare future targets for `service` or `on_behalf_of_user` identity modes.
 - Require each future target to declare its grants, identity mode, header
   contract, audit fields, and domain guardrails.

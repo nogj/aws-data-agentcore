@@ -111,6 +111,18 @@ def test_accepts_configured_function() -> None:
     assert result.relations_used == [relation]
 
 
+def test_accepts_logical_connectors_in_where() -> None:
+    relation = relation_name()
+    first_column, second_column = relation_columns()
+    result = validate_sql(
+        f"SELECT {first_column} FROM {relation} "
+        f"WHERE {first_column} IS NOT NULL AND {second_column} IS NOT NULL",
+        config(),
+        max_rows=10,
+    )
+    assert result.relations_used == [relation]
+
+
 def test_rejects_unconfigured_function() -> None:
     relation = relation_name()
     first_column, _ = relation_columns()

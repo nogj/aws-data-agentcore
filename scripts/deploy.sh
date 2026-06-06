@@ -83,7 +83,8 @@ aws cloudformation deploy \
     RuntimeSecurityGroupIds="$(read_agent_param runtime_security_group_ids)" \
     AgentRuntimeName="${AGENT_RUNTIME_NAME}"
 
-RUNTIME_ARN="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${RUNTIME_STACK}" --query "Stacks[0].Outputs[?OutputKey=='RuntimeArn'].OutputValue" --output text)"
+RUNTIME_ID="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${RUNTIME_STACK}" --query "Stacks[0].Outputs[?OutputKey=='RuntimeId'].OutputValue" --output text)"
+RUNTIME_ARN="$(aws bedrock-agentcore-control get-agent-runtime --region "${REGION}" --agent-runtime-id "${RUNTIME_ID}" --query agentRuntimeArn --output text)"
 RUNTIME_ENDPOINT_URL="$(python3 -c 'import sys,urllib.parse; print("https://bedrock-agentcore.{}.amazonaws.com/runtimes/{}/invocations?qualifier=DEFAULT".format(sys.argv[1], urllib.parse.quote(sys.argv[2], safe="")))' "${REGION}" "${RUNTIME_ARN}")"
 
 aws cloudformation deploy \

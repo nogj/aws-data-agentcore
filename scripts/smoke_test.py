@@ -30,6 +30,7 @@ def _post(gateway_url: str, token: str, payload: dict[str, Any]) -> dict[str, An
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": "2025-06-18",
         },
         method="POST",
     )
@@ -107,7 +108,7 @@ def main() -> None:
     _assert_no_error(called)
     if not _contains_ok_status(called):
         raise RuntimeError("ask_database did not return status ok")
-
+    print(json.dumps(called, indent=4))
     print("End-to-end smoke test passed")
 
 

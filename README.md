@@ -290,7 +290,7 @@ Use Entra ID as the OIDC provider for the AgentCore Gateway:
 ```json
 {
   "jwt_discovery_url": "https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration",
-  "jwt_allowed_audience": "api://<application-client-id>",
+  "jwt_allowed_audience": "<access-token-aud-claim>",
   "required_scope": "data:read"
 }
 ```
@@ -298,12 +298,18 @@ Use Entra ID as the OIDC provider for the AgentCore Gateway:
 Recommended Entra setup:
 
 - Create an App Registration for the API exposed by this agent.
-- Set the Application ID URI used as `jwt_allowed_audience`.
+- Set an Application ID URI such as `api://<api-app-id>`.
+- Set the API app manifest value `api.requestedAccessTokenVersion` to `2` when
+  using the v2 discovery document.
 - For delegated user flows, expose scopes such as `data:read` and
   `data:sql:read`; Entra emits these in the `scp` claim.
 - For client-credentials flows, define app roles with the same values; Entra
   emits these in the `roles` claim.
 - Grant and consent the client applications that will call the Gateway.
+
+Always decode one real access token and set `jwt_allowed_audience` to its exact
+`aud` claim. With Entra v2 tokens this is often the API application client ID,
+even when clients request `api://<api-app-id>/data:read`.
 
 Gateway `AllowedScopes` validates delegated scopes. Application roles are
 enforced by the managed interceptor and the Runtime using the configured

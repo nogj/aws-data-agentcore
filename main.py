@@ -15,7 +15,6 @@ from app.authorization import (
 )
 from app.audit import emit
 from app.capabilities.database.database import execute_read_only_sql
-from app.capabilities.database.llm import generate_sql, summarize_results
 from app.capabilities.database.models import AskDatabaseRequest, AskDatabaseResponse
 from app.capabilities.database.security import (
     has_scope,
@@ -127,6 +126,8 @@ async def ask_database(
         validate_question(request.question, config)
         validate_context(request.context, config)
         async with asyncio.timeout(config.query.timeout_seconds):
+            from app.capabilities.database.llm import generate_sql, summarize_results
+
             bounded_rows = min(
                 request.max_rows or config.query.default_max_rows,
                 config.query.absolute_max_rows,
