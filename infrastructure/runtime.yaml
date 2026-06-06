@@ -32,6 +32,18 @@ Parameters:
     Default: ""
     AllowedPattern: "^$|[A-Za-z0-9_]{1,64}"
     Description: Optional explicit AgentCore runtime name. Leave empty for the default per-environment name.
+  IdleRuntimeSessionTimeout:
+    Type: Number
+    Default: 300
+    MinValue: 60
+    MaxValue: 28800
+    Description: Seconds before an idle AgentCore Runtime session is terminated.
+  MaxLifetime:
+    Type: Number
+    Default: 3600
+    MinValue: 60
+    MaxValue: 28800
+    Description: Maximum lifetime in seconds for an AgentCore Runtime session.
 
 Conditions:
   UseExplicitAgentRuntimeName: !Not [!Equals [!Ref AgentRuntimeName, ""]]
@@ -138,8 +150,8 @@ Resources:
         OPENAI_SECRET_ARN: !Ref OpenAISecretArn
         AWS_REGION: !Ref AWS::Region
       LifecycleConfiguration:
-        IdleRuntimeSessionTimeout: 300
-        MaxLifetime: 3600
+        IdleRuntimeSessionTimeout: !Ref IdleRuntimeSessionTimeout
+        MaxLifetime: !Ref MaxLifetime
       Tags:
         Environment: !Ref Environment
         Application: read-only-data-agent

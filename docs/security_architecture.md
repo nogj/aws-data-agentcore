@@ -699,7 +699,8 @@ Recommended production controls:
 - explicit security-barrier views where available;
 - regular review of allowed relations and columns;
 - smoke tests that cover both MCP `tools/list` and `tools/call` with the
-  current supported MCP protocol version;
+  current supported MCP protocol version, read only the expected event-stream
+  payload, and close any returned `Mcp-Session-Id`;
 - CI checks for configuration drift and placeholder parameters.
 
 ## Design Decisions
@@ -721,6 +722,10 @@ Current accepted decisions:
 - Use the exact IdP token `aud` claim as `jwt_allowed_audience`.
 - Prefer private VPC endpoints over NAT for low-cost validation when the
   Runtime only needs AWS service egress.
+- Keep validation runtime lifecycle settings short, such as
+  `idle_runtime_session_timeout=60` and `max_lifetime=900`, while recognizing
+  that MCP pings or an open stream count as activity and can prevent idle
+  termination.
 - Prepare future targets for `service` or `on_behalf_of_user` identity modes.
 - Require each future target to declare its grants, identity mode, header
   contract, audit fields, and domain guardrails.

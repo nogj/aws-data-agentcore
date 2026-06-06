@@ -35,6 +35,10 @@ REGION="$(read_param region)"
 BUCKET="$(read_param artifact_bucket_name)"
 ALLOWED_REQUEST_HEADERS="${ALLOWED_REQUEST_HEADERS:-$(read_optional_agent_param allowed_request_headers)}"
 ALLOWED_REQUEST_HEADERS="${ALLOWED_REQUEST_HEADERS:-x-data-agent-grants,x-data-agent-identity}"
+IDLE_RUNTIME_SESSION_TIMEOUT="$(read_optional_agent_param idle_runtime_session_timeout)"
+IDLE_RUNTIME_SESSION_TIMEOUT="${IDLE_RUNTIME_SESSION_TIMEOUT:-300}"
+MAX_LIFETIME="$(read_optional_agent_param max_lifetime)"
+MAX_LIFETIME="${MAX_LIFETIME:-3600}"
 BOOTSTRAP_STACK="data-agent-bootstrap-${ENVIRONMENT}"
 if [[ "${DATA_AGENT_INSTANCE}" == "data-agent" ]]; then
   STACK_SUFFIX=""
@@ -81,7 +85,9 @@ aws cloudformation deploy \
     OpenAISecretArn="$(read_optional_agent_param openai_secret_arn)" \
     PrivateSubnetIds="$(read_agent_param private_subnet_ids)" \
     RuntimeSecurityGroupIds="$(read_agent_param runtime_security_group_ids)" \
-    AgentRuntimeName="${AGENT_RUNTIME_NAME}"
+    AgentRuntimeName="${AGENT_RUNTIME_NAME}" \
+    IdleRuntimeSessionTimeout="${IDLE_RUNTIME_SESSION_TIMEOUT}" \
+    MaxLifetime="${MAX_LIFETIME}"
 
 RUNTIME_ID="$(aws cloudformation describe-stacks --region "${REGION}" --stack-name "${RUNTIME_STACK}" --query "Stacks[0].Outputs[?OutputKey=='RuntimeId'].OutputValue" --output text)"
 RUNTIME_ARN="$(aws bedrock-agentcore-control get-agent-runtime --region "${REGION}" --agent-runtime-id "${RUNTIME_ID}" --query agentRuntimeArn --output text)"

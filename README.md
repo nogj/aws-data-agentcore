@@ -164,7 +164,8 @@ DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/smoke_test
 prefix, per-instance Runtime IAM role name, and smoke-test target selection.
 Override `TARGET_NAME` only if the Gateway target name should differ from the
 instance name. `deploy.sh` always lets `infrastructure/runtime.yaml` create the
-per-instance Runtime IAM role.
+per-instance Runtime IAM role. `smoke_test.sh` initializes and closes an MCP
+session so validation runs do not leave Gateway/Runtime sessions open.
 
 Prompts are also per instance. Each Runtime receives its own `CONFIG_KEY`, so
 the `prompts.sql_generation` and `prompts.result_summary` sections in

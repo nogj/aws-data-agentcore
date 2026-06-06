@@ -4,6 +4,7 @@ from scripts.validate_parameters import (
     _placeholder_keys,
     _validate_allowed_request_headers,
     _validate_authorization_config,
+    _validate_runtime_lifecycle,
     _validate_target_credential_config,
 )
 
@@ -98,6 +99,23 @@ def test_accepts_allowed_headers_with_signature_headers() -> None:
             )
         }
     )
+
+
+def test_accepts_short_validation_lifecycle() -> None:
+    _validate_runtime_lifecycle(
+        {"idle_runtime_session_timeout": 60, "max_lifetime": 900}
+    )
+
+
+def test_rejects_idle_timeout_greater_than_max_lifetime() -> None:
+    try:
+        _validate_runtime_lifecycle(
+            {"idle_runtime_session_timeout": 900, "max_lifetime": 60}
+        )
+    except SystemExit as exc:
+        assert "idle_runtime_session_timeout must be <= max_lifetime" in str(exc)
+        return
+    raise AssertionError("Expected SystemExit")
 
 
 def test_scopes_mode_rejects_roles_claim() -> None:

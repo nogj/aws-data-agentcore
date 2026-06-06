@@ -40,6 +40,8 @@ def _placeholder_keys(parameters: dict[str, Any], instance: str) -> list[str]:
         "allowed_request_headers",
         "private_subnet_ids",
         "runtime_security_group_ids",
+        "idle_runtime_session_timeout",
+        "max_lifetime",
         "target_credential_provider_type",
     }
     visible_parameters = _deployment_parameters(parameters, instance)
@@ -133,6 +135,17 @@ def _validate_allowed_request_headers(parameters: dict[str, Any]) -> None:
         )
 
 
+def _validate_runtime_lifecycle(parameters: dict[str, Any]) -> None:
+    idle_timeout = int(parameters.get("idle_runtime_session_timeout", 300))
+    max_lifetime = int(parameters.get("max_lifetime", 3600))
+    if not 60 <= idle_timeout <= 28800:
+        raise SystemExit("idle_runtime_session_timeout must be between 60 and 28800")
+    if not 60 <= max_lifetime <= 28800:
+        raise SystemExit("max_lifetime must be between 60 and 28800")
+    if idle_timeout > max_lifetime:
+        raise SystemExit("idle_runtime_session_timeout must be <= max_lifetime")
+
+
 def main() -> None:
     path = Path(sys.argv[1])
     environment = sys.argv[2]
@@ -151,6 +164,7 @@ def main() -> None:
         )
     _validate_target_credential_config(parameters)
     _validate_allowed_request_headers(parameters)
+    _validate_runtime_lifecycle(parameters)
 
     required_scope = parameters.get("required_scope")
     authorization = config.get("authorization", {})
