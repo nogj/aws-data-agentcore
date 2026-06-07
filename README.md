@@ -1,19 +1,21 @@
 # AWS Data AgentCore
 
-Modular tool hub for Amazon Bedrock AgentCore. The repository contains the
-shared Gateway foundation plus the first supported target Runtime: a read-only
-database agent exposed as the MCP tool `ask_database`.
+Modular tool hub for Amazon Bedrock AgentCore. The repository contains a shared
+Gateway foundation and a read-only database Runtime exposed as the MCP tool
+`ask_database`.
 
-The key design point is separation of concerns:
+The architecture separates shared routing concerns from target-specific
+capability contracts:
 
 - **Gateway hub**: authenticates callers, routes MCP tool traffic, propagates a
   bounded authorization context, and hosts multiple targets in one environment.
 - **Runtime targets**: implement one capability contract each, with their own
   IAM role, secrets, network posture, configuration, and deterministic
   guardrails.
-- **Database Runtime**: the first concrete target. It turns natural-language
-  questions into validated read-only SQL, executes through SQLAlchemy Core, and
-  returns bounded deterministic JSON.
+- **Database Runtime**: turns natural-language questions into validated
+  read-only SQL, executes through SQLAlchemy Core, and returns a bounded
+  canonical `data` object. Human-facing rendering belongs outside the trusted
+  Runtime.
 
 ## Documentation Map
 
@@ -43,7 +45,7 @@ aws-data-agentcore/
 │   ├── runtime.yaml          One database Runtime instance
 │   ├── target.yaml           IAM GatewayTarget for Runtime MCP endpoint
 │   └── target-mcp-oauth-obo.yaml
-│                            Candidate template for future OBO MCP targets
+│                            Template for OBO MCP targets
 ├── postgres/                Generic PostgreSQL read-only templates
 ├── scripts/                 Build, publish, deploy, CLI, and smoke-test tools
 └── tests/                   Unit tests for critical controls
@@ -70,10 +72,8 @@ Each Runtime target is deployed separately:
 - GatewayTarget registration
 - capability configuration and guardrails
 
-The current deployment scripts support database Runtime targets using
-`GATEWAY_IAM_ROLE`. Future OBO targets should use their own deployment path and
-credential-provider configuration rather than broadening the database target
-contract.
+The database deployment scripts create `GATEWAY_IAM_ROLE` Runtime targets. OBO
+targets use a dedicated deployment path and credential-provider configuration.
 
 ## Prerequisites
 
@@ -218,8 +218,8 @@ Useful implementation boundaries:
 
 Versioned artifacts and configuration keys are published immutably. Use
 `scripts/cleanup_artifacts.py` to remove keys that are not referenced by the
-active manifest, the retained manifest window, or the currently deployed
-Runtime stack parameters. It runs as a dry run unless `--apply` is passed.
+active manifest, the retained manifest window, or Runtime stack parameters. It
+runs as a dry run unless `--apply` is passed.
 
 ## AWS References
 

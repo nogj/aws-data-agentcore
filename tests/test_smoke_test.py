@@ -53,7 +53,12 @@ def test_formats_agent_cli_tool_result() -> None:
                     "text": json.dumps(
                         {
                             "status": "ok",
-                            "answer": "payments-postgres is critical.",
+                            "data": {
+                                "rows": [{"ci_name": "payments-postgres"}],
+                                "row_count": 1,
+                                "truncated": False,
+                                "assumptions": [],
+                            },
                             "sql": "SELECT name FROM agent_cmdb.cis",
                             "row_count": 1,
                             "relations_used": ["agent_cmdb.cis"],
@@ -66,6 +71,6 @@ def test_formats_agent_cli_tool_result() -> None:
 
     formatted = _format_tool_result(response)
 
-    assert "payments-postgres is critical." in formatted
+    assert "payments-postgres" in formatted
     assert "SELECT name FROM agent_cmdb.cis" in formatted
     assert "rows=1" in formatted

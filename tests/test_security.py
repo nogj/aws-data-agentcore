@@ -9,7 +9,7 @@ from app.capabilities.database.security import (
     validate_context,
     validate_question,
 )
-from main import _json_answer, _json_payload, _response_rows
+from main import _json_payload, _response_rows
 
 
 def config() -> AppConfig:
@@ -72,7 +72,7 @@ def test_marks_response_truncated_when_normalization_omits_source_rows() -> None
     assert truncated
 
 
-def test_json_answer_serializes_rows_without_llm_summary() -> None:
+def test_json_payload_is_canonical_response_data() -> None:
     payload = _json_payload(
         rows=[{"ci_name": "aplicación", "criticality": "high"}],
         row_count=1,
@@ -86,7 +86,7 @@ def test_json_answer_serializes_rows_without_llm_summary() -> None:
         "rows": [{"ci_name": "aplicación", "criticality": "high"}],
         "truncated": False,
     }
-    assert json.loads(_json_answer(payload)) == payload
+    assert json.loads(json.dumps(payload, ensure_ascii=False)) == payload
 
 
 def test_json_payload_converts_database_scalars_to_json_values() -> None:
@@ -112,4 +112,4 @@ def test_json_payload_converts_database_scalars_to_json_values() -> None:
             "count": 6,
         }
     ]
-    assert json.loads(_json_answer(payload)) == payload
+    assert json.loads(json.dumps(payload, ensure_ascii=False)) == payload

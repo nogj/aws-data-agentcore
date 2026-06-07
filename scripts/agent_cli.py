@@ -58,9 +58,11 @@ def _format_tool_result(response: dict[str, Any], raw: bool = False) -> str:
         return str(payload)
 
     lines: list[str] = []
-    answer = payload.get("answer") or payload.get("summary")
-    if answer:
-        lines.append(str(answer))
+    message = payload.get("message")
+    if message:
+        lines.append(str(message))
+    elif isinstance(payload.get("data"), dict):
+        lines.append(json.dumps(payload["data"], ensure_ascii=False))
 
     sql = payload.get("sql")
     if sql:
@@ -173,7 +175,7 @@ class AgentCli:
                     "  :help          Show this help",
                     "  :tools         Print selected MCP tool name",
                     "  :max-rows N    Set query row limit for subsequent questions",
-                    "  :sql           Toggle generated SQL in subsequent answers",
+                    "  :sql           Toggle generated SQL in subsequent responses",
                     "  :raw           Toggle raw JSON output",
                     "  :quit          Close the MCP session and exit",
                 ]

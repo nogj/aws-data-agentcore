@@ -1,9 +1,8 @@
 # Gateway Hub
 
-The Gateway hub is the shared MCP entry point for an environment. It is not a
-database-specific component. Its job is to authenticate callers, route MCP
-requests to registered targets, and pass only the trusted context each target
-needs.
+The Gateway hub is the shared MCP entry point for an environment. It
+authenticates callers, routes MCP requests to registered targets, and passes
+the trusted context each target needs.
 
 ## Shared Hub Resources
 
@@ -17,10 +16,8 @@ needs.
 - Secrets Manager header-signing secret
 - CloudWatch log retention for the interceptor
 
-These resources are shared by all targets in the same environment. Deploying a
-new Runtime target should not require changing the hub unless the target needs
-new shared identity-provider conventions, Gateway role permissions, or
-interceptor behavior.
+These resources are shared by all targets in the same environment. Runtime
+targets register with the hub through their GatewayTarget configuration.
 
 ## Request Flow
 
@@ -65,8 +62,8 @@ It emits:
 - `x-data-agent-issued-at`
 - `x-data-agent-signature`
 
-Targets should allowlist only the headers they require. The database Runtime
-currently also propagates `Mcp-Session-Id` for Runtime microVM affinity.
+Targets allowlist only the headers they require. The database Runtime
+propagates `Mcp-Session-Id` for Runtime microVM affinity.
 
 ## Capability Contract
 
@@ -128,15 +125,15 @@ AgentCore Runtime MCP targets:
 - Runtime endpoint URL generated from the deployed Runtime ARN
 - target-specific request/response header allowlists
 
-This is the correct template for the current database Runtime path.
+This is the template for the database Runtime path.
 
-`infrastructure/target-mcp-oauth-obo.yaml` is a candidate template for future
-MCP targets that need AgentCore Identity/outbound OAuth authorization. It keeps
-OBO credential-provider settings out of the database target contract.
+`infrastructure/target-mcp-oauth-obo.yaml` is the template for MCP targets that
+need AgentCore Identity/outbound OAuth authorization. It keeps OBO
+credential-provider settings out of the database target contract.
 
 When OBO targets need Gateway role permissions for AgentCore Identity token
 vending, deploy `infrastructure/gateway-identity-permissions.yaml` for that
-environment. Do not deploy it for database-only environments.
+environment.
 
 ## Adding A New Target
 
@@ -155,11 +152,11 @@ Treat each target as a new module. Define:
 The target should live in its own package under `app/capabilities/<module>/`
 unless it is implemented by a separate Runtime codebase.
 
-## Current Deployment Boundary
+## Deployment Boundary
 
 `scripts/deploy.sh` deploys database Runtime targets that use
 `GATEWAY_IAM_ROLE`. It parameterizes the Runtime instance and target name, but
-it is not a generic OBO target deployer.
+OBO targets use their dedicated target template and deployment path.
 
 Use a dedicated deployment path for OBO targets so an OAuth/OBO configuration
 cannot silently deploy as an IAM-authorized database target.

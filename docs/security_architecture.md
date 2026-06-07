@@ -13,11 +13,10 @@ Layer-specific operational details live in:
 - [Microsoft Entra ID setup](entra_id_setup.md) for a practical OIDC provider
   setup and token validation flow.
 
-The first implemented module is the read-only database capability,
-`ask_database`. The same Gateway is intended to evolve into a hub for other
-tools, knowledge bases, retrieval services, or specialized agents. Each module
-must declare its own authorization grants, downstream identity model, header
-contract, audit requirements, and data minimization rules.
+The read-only database capability, `ask_database`, is deployed behind the
+shared Gateway hub. Each module declares its own authorization grants,
+downstream identity model, header contract, audit requirements, and data
+minimization rules.
 
 ## Executive Summary
 
@@ -26,22 +25,20 @@ Callers authenticate to the Gateway with an OIDC/JWT access token. The Gateway
 validates the token and a request interceptor derives trusted authorization
 grants and bounded caller identity claims for downstream targets.
 
-The database module is the first target behind the hub. It uses a fixed
-technical identity stored in AWS Secrets Manager. End users are authorized to
-use the capability, but PostgreSQL sees the module's read-only database role
-rather than the individual caller. Fine-grained database exposure is enforced
-through approved views, role grants, SQL validation, read-only transactions,
-output filtering, and timeouts.
+The database module uses a fixed technical identity stored in AWS Secrets
+Manager. End users are authorized to use the capability, while PostgreSQL sees
+the module's read-only database role. Fine-grained database exposure is
+enforced through approved views, role grants, SQL validation, read-only
+transactions, output filtering, and timeouts.
 
-The hub is designed for mixed identity models. Some modules will use fixed
-service identities. Others may need on-behalf-of-user access through AgentCore
-Identity or another approved delegated credential pattern. A module must not
-inherit another module's trust assumptions by default.
+The hub supports mixed identity models. Modules can use fixed service
+identities or on-behalf-of-user access through AgentCore Identity or another
+approved delegated credential pattern. Each module owns its trust assumptions.
 
 The LLM is never trusted as a security boundary. In the database module it may
 propose SQL, but the SQL must pass deterministic validation with SQLGlot before
-execution. Future LLM-backed modules must provide equivalent deterministic
-guards appropriate to their domain.
+execution. LLM-backed modules provide deterministic guards appropriate to their
+domain.
 
 ## Hub Modularity Principles
 
@@ -49,8 +46,8 @@ The Gateway hub follows these modular security principles:
 
 - **One hub, many contracts**: Gateway can expose multiple targets, but each
   target owns its own authorization, headers, identity mode, and audit contract.
-- **No implicit inheritance**: a new module does not inherit database-module
-  grants, headers, prompts, credentials, or data handling rules.
+- **Explicit contracts**: each module declares its own grants, headers,
+  prompts, credentials, and data handling rules.
 - **Least-context routing**: Gateway and interceptors pass only the grants,
   identity claims, or tokens needed by the selected target.
 - **Capability-first authorization**: permissions are named for the action or
@@ -91,8 +88,8 @@ sequenceDiagram
     Runtime->>DB: Execute validated SELECT as fixed read-only role
     DB-->>Runtime: Rows
     Runtime->>Runtime: Normalize, redact, and bound rows
-    Runtime->>Runtime: Build deterministic JSON response
-    Runtime-->>Client: JSON answer, optional SQL when authorized
+    Runtime->>Runtime: Build canonical data object
+    Runtime-->>Client: Canonical data, optional SQL when authorized
 ```
 
 ## Security Boundaries
@@ -270,14 +267,11 @@ RequestHeaderAllowlist:
 This avoids trusting client-provided authorization headers while still giving
 the Runtime the caller context it needs for capability decisions and audit.
 
-Implementation note: the interceptor code is currently embedded inline in the
-CloudFormation template. Runtime authorization helpers live separately in
-`app/authorization.py` because the Runtime consumes trusted headers while the
-interceptor decodes inbound JWT claims. A dedicated test loads and executes the
-inline Lambda handler from the template to reduce drift risk. If the interceptor
-logic grows, promote it to a versioned source file and either package it as a
-Lambda artifact or add a CI check that verifies the inline `ZipFile` matches the
-canonical source.
+The interceptor code is embedded inline in the CloudFormation template. Runtime
+authorization helpers live separately in `app/authorization.py` because the
+Runtime consumes trusted headers while the interceptor decodes inbound JWT
+claims. A dedicated test loads and executes the inline Lambda handler from the
+template to reduce drift risk.
 
 ## Capability And Target Model
 
@@ -285,7 +279,7 @@ See [Gateway hub](gateway_hub.md) for the operational target contract. This
 section defines the security semantics that every target must preserve.
 
 Capabilities declare both authorization and downstream identity expectations.
-The current database capability is:
+The database capability is:
 
 ```yaml
 capabilities:
@@ -301,10 +295,10 @@ capabilities:
 downstream access. For `ask_database`, PostgreSQL sees the fixed read-only role
 from Secrets Manager, not the final caller.
 
-`identity_mode: on_behalf_of_user` is reserved for future targets that must
-access downstream systems with delegated caller authority, such as SharePoint,
-Jira, Salesforce, or an internal API that enforces user-level permissions. Such
-capabilities must declare at least:
+`identity_mode: on_behalf_of_user` is used by targets that access downstream
+systems with delegated caller authority, such as SharePoint, Jira, Salesforce,
+or an internal API that enforces user-level permissions. Such capabilities
+declare at least:
 
 ```yaml
 identity_mode: on_behalf_of_user
@@ -352,9 +346,9 @@ database target should not receive raw inbound bearer tokens.
 
 ## Source Organization
 
-See [Database Runtime](database_runtime.md) for the current implementation
-layout. The security requirement is that domain-specific guardrails stay local
-to their capability package unless they are truly shared by multiple modules.
+See [Database Runtime](database_runtime.md) for the implementation layout. The
+security requirement is that domain-specific guardrails stay local to their
+capability package unless they are truly shared by multiple modules.
 
 The Python source layout mirrors the hub model:
 
@@ -372,11 +366,11 @@ app/
         └── sql_validator.py  SQLGlot validation for generated SQL
 ```
 
-Future modules should be added under `app/capabilities/<module>/` rather than
-expanding the database package. Shared code should move to top-level `app/`
-only when at least two modules genuinely need it. This keeps domain guardrails
-local and prevents a KB, document, or action agent from inheriting database
-assumptions accidentally.
+Additional modules are added under `app/capabilities/<module>/` rather than
+expanding the database package. Shared code moves to top-level `app/` only when
+at least two modules genuinely need it. This keeps domain guardrails local and
+prevents a KB, document, or action agent from inheriting database assumptions
+accidentally.
 
 ## Grant Semantics
 
@@ -385,12 +379,12 @@ assumptions accidentally.
 
 `data:sql:read` is an additional disclosure permission. It allows SQL visibility
 only when the caller also sets `include_sql=True`. Without this grant, the user
-can receive the natural-language answer but not the generated SQL.
+can receive the canonical `data` result but not the generated SQL.
 
-This separation lets business users consume answers while reserving technical
+This separation lets business users consume query results while reserving technical
 query visibility for analysts, auditors, or operators.
 
-Future modules should use similarly narrow grants:
+Additional modules use similarly narrow grants:
 
 - `kb:query` for querying an approved knowledge base.
 - `docs:read` for user-delegated document search.
@@ -459,8 +453,8 @@ SQLGlot parses the SQL into an AST. The validator then enforces:
 This is stronger than regex-based validation because checks operate on parsed
 SQL structure rather than string shape.
 
-SQLGlot does not replace database permissions. It is a deterministic gate before
-execution; the database remains the final authority.
+SQLGlot is a deterministic gate before execution; database permissions remain
+the final authority.
 
 ## Input And Output Controls
 
@@ -486,12 +480,12 @@ After database execution, rows are normalized:
   to JSON-compatible values;
 - only a bounded subset is returned to the caller.
 
-The database module returns deterministic JSON from normalized rows and does not
-make a second LLM call to summarize the result set. This keeps the LLM outside
-the final answer-construction path after SQL generation and validation.
+The database module returns a canonical `data` object from normalized rows.
+Human-facing rendering or summarization happens outside the trusted Runtime
+after an explicit data-governance review.
 
-Operational rejection and error messages are fixed configuration values and do
-not invoke the LLM.
+Operational rejection and error messages are fixed configuration values handled
+by Runtime code.
 
 ## Secrets And Configuration
 
@@ -570,19 +564,18 @@ The database module additionally records:
 - relations used;
 - row count;
 
-Current audit does not make PostgreSQL see the final caller. If database-native
-per-user auditing is required, a future change should set approved session
-metadata such as `application_name` or a custom session variable after careful
-review, without using it as the only authorization control.
+Caller identity is recorded in audit events. PostgreSQL access uses the fixed
+database role; database-native per-user audit metadata, when required, should
+use approved session metadata such as `application_name` or a custom session
+variable after careful review.
 
 ## Adding Gateway Targets
 
-See [Gateway hub](gateway_hub.md) for the target templates and current
-deployment boundary. This section captures the security review requirements for
-new modules.
+See [Gateway hub](gateway_hub.md) for target templates and deployment
+boundaries. This section captures the security review requirements for modules.
 
-Additional targets should be treated as new security modules. They should not
-inherit the database target contract by default. Each target should define:
+Additional targets are treated as security modules with explicit contracts.
+Each target defines:
 
 - target name;
 - exposed tools;
@@ -596,16 +589,15 @@ inherit the database target contract by default. Each target should define:
 - resource-specific residual risks.
 
 AgentCore Identity is a shared hub capability for targets that require
-delegated downstream access. It is not part of the database target's execution
-path. The first implemented database target uses `identity_mode: service`;
+delegated downstream access. The database target uses `identity_mode: service`;
 PostgreSQL sees a fixed read-only role, while caller identity is used for
-Gateway authorization and audit only.
+Gateway authorization and audit.
 
 For OBO targets, the shared hub owns the conventions for provider inventory,
 naming, audit, and review. Each target owns its own credential provider,
 downstream audience, scopes, allowed headers, runtime behavior, and residual
 risk assessment. `config/identity-providers.example.json` documents the
-expected inventory shape for future AgentCore Identity providers.
+expected inventory shape for AgentCore Identity providers.
 
 Common target patterns:
 
@@ -643,7 +635,7 @@ In this repository, `infrastructure/target.yaml` is intentionally limited to
 the default `GATEWAY_IAM_ROLE` credential provider for IAM-authorized AgentCore
 Runtime MCP targets such as the database agent, and `deploy.sh` rejects OAUTH
 target parameters for that path. `infrastructure/target-mcp-oauth-obo.yaml`
-is a separate candidate template for future MCP targets that require OBO.
+is a separate template for MCP targets that require OBO.
 OBO targets must be backed by an AgentCore OAuth credential provider ARN,
 requested scopes, and a capability declaration with
 `identity_mode: on_behalf_of_user` and `downstream_audience`.
@@ -664,9 +656,8 @@ stack that attaches `bedrock-agentcore:GetWorkloadAccessToken`,
 shared Gateway role. This stack should be deployed only for environments that
 host OBO targets.
 
-Example planning metadata for an OBO module. These values are not consumed by
-the database-agent `deploy.sh`; use them with dedicated OBO deployment
-automation or pass the equivalent parameters to
+Example metadata for an OBO module. Use these values with dedicated OBO
+deployment automation or pass the equivalent parameters to
 `infrastructure/target-mcp-oauth-obo.yaml`:
 
 ```json
@@ -716,8 +707,8 @@ The architecture still requires operational hardening:
 - `LIMIT` caps returned rows, not all database work.
 - The fixed database role means all authorized users share the same database
   read perimeter.
-- Prompt injection can still influence answer wording, even though SQL execution
-  is validated.
+- Prompt injection can still influence SQL-candidate generation, even though
+  execution is validated.
 - Redaction depends on configured patterns and approved view design.
 - VPC endpoint policy and security-group drift can break model, secret, or log
   access without changing application code.
@@ -735,8 +726,8 @@ Recommended production controls:
 - explicit security-barrier views where available;
 - regular review of allowed relations and columns;
 - smoke tests that cover both MCP `tools/list` and `tools/call` with the
-  current supported MCP protocol version, read only the expected event-stream
-  payload, and close any returned `Mcp-Session-Id`;
+  supported MCP protocol version, read only the expected event-stream payload,
+  and close any returned `Mcp-Session-Id`;
 - CI checks for configuration drift and placeholder parameters.
 
 For the stateless database Runtime, Gateway MCP sessions are not required. The
@@ -748,9 +739,7 @@ authorizer and the signed `x-data-agent-*` headers. If Gateway MCP sessions are
 enabled for another target, that target must not propagate `Mcp-Session-Id`
 because AgentCore Gateway owns the downstream target session mapping.
 
-## Design Decisions
-
-Current accepted decisions:
+## Security Baseline
 
 - Treat AgentCore Gateway as a modular tool hub, not a single-purpose database
   facade.
@@ -761,8 +750,8 @@ Current accepted decisions:
 - Propagate only bounded caller identity claims, not the raw inbound JWT.
 - Use SQLGlot for deterministic SQL validation.
 - Treat LLM output as untrusted until validated.
-- Require MCP clients and smoke tests to send the currently supported
-  `MCP-Protocol-Version` header. The validated AgentCore Gateway version is
+- Require MCP clients and smoke tests to send the supported
+  `MCP-Protocol-Version` header. The AgentCore Gateway version is
   `2025-06-18`.
 - Use the exact IdP token `aud` claim as `jwt_allowed_audience`.
 - Prefer private VPC endpoints over NAT for low-cost validation when the
@@ -771,11 +760,11 @@ Current accepted decisions:
   `idle_runtime_session_timeout=60` and `max_lifetime=900`, while recognizing
   that MCP pings or an open stream count as activity and can prevent idle
   termination.
-- Prepare future targets for `service` or `on_behalf_of_user` identity modes.
-- Require each future target to declare its grants, identity mode, header
+- Prepare targets for `service` or `on_behalf_of_user` identity modes.
+- Require each target to declare its grants, identity mode, header
   contract, audit fields, and domain guardrails.
 
-Open decisions for future targets:
+## Extension Review Topics
 
 - which downstream systems need OBO;
 - which AgentCore Identity credential providers are required;

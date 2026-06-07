@@ -12,7 +12,6 @@ def _boot_log(message: str) -> None:
 _boot_log("main.py start")
 
 import asyncio
-import json
 import logging
 import os
 import uuid
@@ -163,19 +162,6 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
-def _json_answer(
-    payload: dict[str, Any],
-) -> str:
-    """Serialize query output deterministically for legacy answer consumers."""
-
-    return json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-
-
 @mcp.tool(
     name="ask_database",
     description=(
@@ -216,7 +202,11 @@ async def ask_database(
     def response(**kwargs: Any) -> dict[str, Any]:
         # Compute elapsed time at the last possible moment for every response path.
         elapsed_ms = int((time.perf_counter() - started) * 1000)
-        return AskDatabaseResponse(trace_id=trace_id, elapsed_ms=elapsed_ms, **kwargs).model_dump()
+        return AskDatabaseResponse(
+            trace_id=trace_id,
+            elapsed_ms=elapsed_ms,
+            **kwargs,
+        ).model_dump(exclude_none=True)
 
     try:
         request = await timed_phase(
@@ -270,10 +260,6 @@ async def ask_database(
                     candidate.assumptions,
                 ),
             )
-            answer = await timed_phase(
-                "json_response_ms",
-                lambda: _json_answer(data),
-            )
         can_show_sql = request.include_sql and (
             config.query.allow_sql_by_default
             or has_scope(
@@ -296,26 +282,24 @@ async def ask_database(
         )
         return response(
             status="ok",
-            answer=answer,
             data=data,
             sql=validated.sql if can_show_sql else None,
             relations_used=validated.relations_used,
             row_count=len(rows),
             warnings=warnings,
-            confidence="high",
         )
     except PermissionError as exc:
         emit("ask_database_rejected", trace_id=trace_id, reason=type(exc).__name__)
         return response(
             status="rejected",
-            answer=config.messages.rejected,
+            message=config.messages.rejected,
             rejection_reason=str(exc),
         )
     except ValueError as exc:
         emit("ask_database_rejected", trace_id=trace_id, reason=type(exc).__name__)
         return response(
             status="rejected",
-            answer=config.messages.rejected,
+            message=config.messages.rejected,
             rejection_reason=str(exc),
         )
     except Exception:
@@ -323,7 +307,7 @@ async def ask_database(
         emit("ask_database_failed", trace_id=trace_id)
         return response(
             status="error",
-            answer=config.messages.error,
+            message=config.messages.error,
         )
 
 

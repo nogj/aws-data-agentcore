@@ -29,13 +29,12 @@ class AskDatabaseResponse(BaseModel):
     """Stable public tool response contract."""
 
     status: Literal["ok", "rejected", "error"]
-    answer: str
     data: dict[str, Any] | None = None
+    message: str | None = None
     sql: str | None = None
     relations_used: list[str] = Field(default_factory=list)
     row_count: int = 0
     warnings: list[str] = Field(default_factory=list)
-    confidence: Literal["high", "medium", "low"] = "low"
     trace_id: str
     elapsed_ms: int
     rejection_reason: str | None = None

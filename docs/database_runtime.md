@@ -1,8 +1,7 @@
 # Database Runtime
 
-The database Runtime is the first concrete target behind the Gateway hub. It
-exposes one MCP tool, `ask_database`, for read-only natural-language questions
-over an approved database model.
+The database Runtime exposes one MCP tool, `ask_database`, for read-only
+natural-language questions over an approved database model.
 
 This document is database-specific. Gateway/OIDC/OBO conventions belong in
 [Gateway hub](gateway_hub.md), and cross-cutting security rationale belongs in
@@ -42,9 +41,8 @@ app/
         └── sql_validator.py  SQLGlot validation for generated SQL
 ```
 
-Future modules should be added under `app/capabilities/<module>/`. Shared code
-should move to top-level `app/` only when at least two modules genuinely need
-it.
+Additional modules belong under `app/capabilities/<module>/`. Shared code moves
+to top-level `app/` only when at least two modules genuinely need it.
 
 ## Tool Flow
 
@@ -67,12 +65,12 @@ sequenceDiagram
     Runtime->>DB: Execute validated SELECT in read-only transaction
     DB-->>Runtime: Rows
     Runtime->>Runtime: Normalize, redact, and bound rows
-    Runtime-->>Client: Deterministic JSON, optional SQL when authorized
+    Runtime-->>Client: Canonical data object, optional SQL when authorized
 ```
 
-The LLM is used to generate a SQL candidate. It is not trusted for
-authorization and the current Runtime does not make a second LLM call to
-summarize rows. The response is built from normalized SQLAlchemy rows.
+The LLM is used to generate a SQL candidate. Fixed Runtime code validates the
+candidate and builds the canonical `data` object from normalized SQLAlchemy
+rows.
 
 ## Configuration
 
@@ -117,8 +115,8 @@ The generated SQL is parsed and validated with SQLGlot. The validator enforces:
 - literal integer `LIMIT` when present
 - final SQL re-rendered from the validated AST
 
-SQLGlot is a deterministic gate before execution. It does not replace database
-permissions.
+SQLGlot is a deterministic gate before execution. Database permissions remain
+the final enforcement layer.
 
 ## PostgreSQL Preparation
 
@@ -136,7 +134,7 @@ security-barrier views where available, indexes for expected access patterns,
 statement timeouts, connection limits, query monitoring, and preferably a read
 replica for analytical traffic.
 
-The current adapter applies PostgreSQL read-only controls:
+The PostgreSQL adapter applies read-only controls:
 
 ```sql
 SET TRANSACTION READ ONLY;
@@ -207,24 +205,36 @@ Before deploying a new database agent:
 
 ## Output Contract
 
-The Runtime returns deterministic JSON containing:
+The Runtime returns deterministic JSON. On success, the canonical `data`
+payload contains:
 
 - normalized rows
 - row count
 - truncation flag
 - SQL assumptions from the generation step
-- optional SQL only when the caller has the SQL visibility grant and requests it
-- trace and elapsed-time metadata
+
+The top-level response includes status, trace ID, elapsed-time metadata,
+relations used, row count, warnings, and optional SQL when the caller has the
+SQL visibility grant and requests it. Rejections and operational errors return
+a fixed `message`.
+
+SQL validation proves that the generated query is syntactically valid,
+read-only, and restricted to the authorized model. Semantic fit to the user's
+intent is represented through assumptions and warnings rather than a confidence
+score.
 
 Common database scalar types such as timestamps and decimals are converted to
 JSON-compatible values. Denied columns and configured redaction patterns are
 applied before rows are returned.
 
+Human interfaces render or summarize `data` outside the trusted Runtime, with a
+separate data-governance review for any LLM-based renderer.
+
 ## Data Governance
 
 The LLM receives the user's question, bounded context, and authorized data-model
-metadata to generate SQL. Query result rows are not sent to a second LLM
-summarization pass in the current Runtime.
+metadata to generate SQL. Query result rows remain in the Runtime response path
+and are governed by output bounds, redaction, and JSON normalization.
 
 Bedrock is the default provider, but its use still requires review of data
 classification, regional processing, logging, retention, and model access.
