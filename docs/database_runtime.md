@@ -25,6 +25,38 @@ sensitive values from Secrets Manager. The IAM role is scoped to the configured
 artifact object, config object, database secret, header-signing secret, optional
 OpenAI secret, Bedrock model invocation, and AgentCore logs.
 
+`infrastructure/private-endpoints.yaml` creates the private AWS service
+endpoints required by the Runtime: S3, Secrets Manager, Bedrock Runtime, and
+CloudWatch Logs. `deploy.sh` deploys this stack before the Runtime unless
+`create_private_service_endpoints=false` is configured for an environment that
+already manages equivalent endpoints.
+
+Endpoint stacks are product-managed and shared by environment/VPC, not by
+agent. The deploy script first searches for an existing
+`data-agent-private-endpoints-<environment>*` stack whose `VpcId` parameter
+matches the target VPC. If found, it reuses that stack and merges the Runtime
+route tables so existing agents keep their S3 gateway access. If no matching
+stack exists, it creates `data-agent-private-endpoints-<environment>-<vpc-id>`.
+Use `private_service_endpoint_stack_name` only to force a specific
+product-managed endpoint stack.
+
+The endpoint stack also creates a shared Runtime access security group. The
+endpoint security group allows HTTPS ingress from that shared SG, and
+`deploy.sh` attaches the shared SG to each Runtime alongside the
+agent-specific Runtime SGs. This keeps endpoint access reusable for future
+agents without allowing the entire VPC CIDR by default.
+
+`infrastructure/agent-foundation.yaml` is optional per agent. When
+`runtime_network_mode=managed`, it creates Runtime-only private subnets, a
+Runtime security group, and route-table outputs inside the configured VPC. When
+`database_secret_mode=managed`, it creates the agent database secret under
+`/data-agent/<environment>/<instance>/...`. The foundation stack creates the
+secret container with an empty JSON object, then `deploy.sh` validates and
+writes `database_secret_string` through Secrets Manager after the stack exists.
+The database URI is therefore not passed as a CloudFormation parameter. If
+either mode remains `external`, the deployment keeps using the caller-supplied
+subnet, security group, or secret ARN.
+
 ## Source Layout
 
 ```text
@@ -157,6 +189,8 @@ Runtime and GatewayTarget with its own:
 
 - config file
 - database secret
+- optional foundation stack for managed subnets, Runtime security group, and
+  secret
 - target name
 - Runtime IAM role
 - authorized data model
@@ -176,9 +210,42 @@ DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/smoke_test
 ```
 
 `DATA_AGENT_INSTANCE` drives the Runtime stack suffix, target name, manifest
-prefix, per-instance Runtime IAM role name, and smoke-test target selection.
-Override `TARGET_NAME` only if the Gateway target name should differ from the
-instance name.
+prefix, per-instance foundation stack, per-instance Runtime IAM role name, and
+smoke-test target selection. Override `TARGET_NAME` only if the Gateway target
+name should differ from the instance name.
+
+Per-agent infrastructure can use external resources:
+
+```json
+{
+  "agents": {
+    "cmdb": {
+      "database_secret_mode": "external",
+      "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/prod/cmdb",
+      "runtime_network_mode": "external",
+      "private_subnet_ids": "subnet-a,subnet-b",
+      "runtime_security_group_ids": "sg-cmdb"
+    }
+  }
+}
+```
+
+Or product-managed per-agent resources inside an existing VPC:
+
+```json
+{
+  "agents": {
+    "cmdb": {
+      "vpc_id": "vpc-123",
+      "runtime_network_mode": "managed",
+      "managed_private_subnet_cidr_1": "10.10.40.0/24",
+      "managed_private_subnet_cidr_2": "10.10.41.0/24",
+      "database_secret_mode": "managed",
+      "database_secret_name": "/data-agent/prod/cmdb/database"
+    }
+  }
+}
+```
 
 ## Instance Checklist
 
@@ -188,12 +255,15 @@ Before deploying a new database agent:
   relations and columns.
 - Create a dedicated read-only database role and grant only the approved views.
 - Create a Secrets Manager secret under `/data-agent/<environment>/<instance>`
-  containing that role's connection string.
+  containing that role's connection string, or set
+  `database_secret_mode=managed` and provide `database_secret_string` so the
+  product writes the created secret before deploying the Runtime.
 - Create a dedicated config YAML with prompts, data model, glossary, synonyms,
   categorical values, SQL rules, query limits, output controls, and capability
   grants.
-- Add `agents.<instance>` overrides to the parameter file when the database
-  secret, subnets, or security groups differ from top-level defaults.
+- Add `agents.<instance>` overrides to the parameter file. Use `external` mode
+  for existing database secrets, subnets, and security groups, or `managed`
+  mode for product-owned per-agent subnets, Runtime security group, and secret.
 - Run `build.sh` once for the code artifact.
 - Run `publish.sh` with `DATA_AGENT_INSTANCE=<instance>` and
   `CONFIG_FILE=<path-to-config>`.

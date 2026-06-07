@@ -5,7 +5,10 @@ from scripts.validate_parameters import (
     _validate_allowed_response_headers,
     _validate_allowed_request_headers,
     _validate_authorization_config,
+    _validate_database_secret_parameters,
+    _validate_private_endpoint_parameters,
     _validate_runtime_lifecycle,
+    _validate_runtime_network_parameters,
     _validate_target_credential_config,
 )
 
@@ -36,6 +39,26 @@ def test_placeholder_check_ignores_other_agent_overrides() -> None:
         "agents": {
             "cmdb": {"database_secret_arn": "cmdb-secret"},
             "assets": {"database_secret_arn": "REPLACE-assets"},
+        },
+    }
+
+    assert _placeholder_keys(parameters, "cmdb") == []
+
+
+def test_placeholder_check_ignores_external_network_when_agent_is_managed() -> None:
+    parameters = {
+        "region": "eu-west-1",
+        "runtime_network_mode": "external",
+        "database_secret_mode": "external",
+        "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/dev/database",
+        "private_subnet_ids": "subnet-REPLACE",
+        "runtime_security_group_ids": "sg-REPLACE",
+        "agents": {
+            "cmdb": {
+                "runtime_network_mode": "managed",
+                "managed_private_subnet_cidr_1": "10.0.10.0/24",
+                "database_secret_mode": "managed",
+            }
         },
     }
 
@@ -133,6 +156,121 @@ def test_rejects_allowed_response_headers_without_mcp_session_id() -> None:
 
 def test_accepts_allowed_response_headers_with_mcp_session_id() -> None:
     _validate_allowed_response_headers({"allowed_response_headers": "Mcp-Session-Id"})
+
+
+def test_private_endpoints_require_vpc_when_enabled() -> None:
+    try:
+        _validate_private_endpoint_parameters(
+            {
+                "create_private_service_endpoints": True,
+                "private_subnet_ids": "subnet-1",
+                "runtime_security_group_ids": "sg-1",
+            }
+        )
+    except SystemExit as exc:
+        assert "vpc_id" in str(exc)
+        return
+    raise AssertionError("Expected SystemExit")
+
+
+def test_private_endpoints_can_be_disabled() -> None:
+    _validate_private_endpoint_parameters({"create_private_service_endpoints": False})
+
+
+def test_managed_runtime_network_requires_subnet_cidr() -> None:
+    try:
+        _validate_runtime_network_parameters(
+            {
+                "runtime_network_mode": "managed",
+                "vpc_id": "vpc-1",
+            }
+        )
+    except SystemExit as exc:
+        assert "managed_private_subnet_cidr_1" in str(exc)
+        return
+    raise AssertionError("Expected SystemExit")
+
+
+def test_managed_runtime_network_does_not_require_external_subnets_or_groups() -> None:
+    _validate_runtime_network_parameters(
+        {
+            "runtime_network_mode": "managed",
+            "vpc_id": "vpc-1",
+            "managed_private_subnet_cidr_1": "10.0.10.0/24",
+        }
+    )
+
+
+def test_external_database_secret_requires_agent_secret_path() -> None:
+    try:
+        _validate_database_secret_parameters(
+            {
+                "database_secret_mode": "external",
+                "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/other/dev/db",
+            },
+            "dev",
+            "cmdb",
+        )
+    except SystemExit as exc:
+        assert "database_secret_arn" in str(exc)
+        return
+    raise AssertionError("Expected SystemExit")
+
+
+def test_managed_database_secret_accepts_default_name() -> None:
+    _validate_database_secret_parameters(
+        {"database_secret_mode": "managed"},
+        "dev",
+        "cmdb",
+    )
+
+
+def test_managed_database_secret_rejects_invalid_secret_json() -> None:
+    try:
+        _validate_database_secret_parameters(
+            {
+                "database_secret_mode": "managed",
+                "database_secret_string": '{"database_uri":"postgresql://db"}}',
+            },
+            "dev",
+            "cmdb",
+        )
+    except SystemExit as exc:
+        assert "database_secret_string must be valid JSON" in str(exc)
+        return
+    raise AssertionError("Expected SystemExit")
+
+
+def test_managed_database_secret_requires_database_uri_key() -> None:
+    try:
+        _validate_database_secret_parameters(
+            {
+                "database_secret_mode": "managed",
+                "database_secret_string": '{"other":"value"}',
+            },
+            "dev",
+            "cmdb",
+        )
+    except SystemExit as exc:
+        assert "database_uri" in str(exc)
+        return
+    raise AssertionError("Expected SystemExit")
+
+
+def test_managed_database_secret_rejects_name_outside_agent_path() -> None:
+    try:
+        _validate_database_secret_parameters(
+            {
+                "database_secret_mode": "managed",
+                "database_secret_name": "/shared/cmdb/database",
+            },
+            "dev",
+            "cmdb",
+        )
+    except SystemExit as exc:
+        assert "database_secret_name" in str(exc)
+        return
+    raise AssertionError("Expected SystemExit")
 
 
 def test_accepts_short_validation_lifecycle() -> None:

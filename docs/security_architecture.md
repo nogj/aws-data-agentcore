@@ -513,30 +513,64 @@ The Runtime IAM role can read only secrets under:
 The deployment scripts validate that parameter files do not contain `REPLACE`
 markers and that secret ARNs match the deployment environment.
 
+For managed database secrets, CloudFormation creates the Secrets Manager secret
+resource with an empty JSON object. The deploy script then validates
+`database_secret_string` as JSON and writes it to Secrets Manager after the
+foundation stack exists. This keeps the database URI out of CloudFormation
+parameters and prevents malformed secret JSON from reaching the Runtime.
+
 ## Network And Runtime Controls
 
 The database Runtime is deployed in VPC mode with configured private subnets and
-security groups. Future targets may have different network requirements and
-should be deployed with their own least-privilege network posture. Recommended
-supporting controls include:
+security groups. The product deployment creates private AWS service endpoints
+by default so Runtime traffic to required AWS APIs stays on private
+connectivity. Supporting controls include:
 
 - private database routing;
-- VPC endpoints for S3, Secrets Manager, Bedrock Runtime, and CloudWatch Logs
-  where possible. For private Runtime subnets without NAT, the S3 gateway
-  endpoint must be associated with the effective route table used by those
-  subnets because AgentCore fetches the Runtime ZIP and configuration from S3
-  before user Python code starts;
+- VPC endpoints for S3, Secrets Manager, Bedrock Runtime, and CloudWatch Logs.
+  The S3 gateway endpoint is associated with the effective route tables used by
+  Runtime subnets because AgentCore fetches the Runtime ZIP and configuration
+  from S3 before user Python code starts;
 - NAT only when an approved external provider is required;
 - database connection limits for the technical role;
 - read replica usage for analytical traffic;
 - CloudWatch log retention aligned with data governance policy.
 
+The default endpoint model is product-managed and shared by environment/VPC,
+not by individual agent. `deploy_private_endpoints.sh` first looks for an
+existing `data-agent-private-endpoints-<environment>*` CloudFormation stack
+whose `VpcId` parameter matches the target VPC. If one exists, the deployment
+reuses it and merges any newly required Runtime route tables for the S3 gateway
+endpoint. If none exists, it creates
+`data-agent-private-endpoints-<environment>-<vpc-id>`.
+
+The endpoint stack creates two network controls:
+
+- an endpoint security group attached to the interface endpoints;
+- a shared Runtime access security group that is attached to each AgentCore
+  Runtime using those endpoints.
+
+By default, the endpoint security group allows HTTPS ingress from the shared
+Runtime access security group, not from the whole VPC CIDR. This lets new
+agents reuse existing product-managed endpoints without broadening endpoint
+access to every workload in the VPC. `endpoint_ingress_cidr` is reserved for
+explicit exceptions where a deployment owner intentionally wants CIDR-based
+endpoint ingress.
+
+Each agent still keeps agent-specific network isolation. In external network
+mode, the deployment uses the supplied Runtime subnets and security groups, then
+adds the shared Runtime access security group returned by the endpoint stack.
+In managed network mode, the per-agent foundation stack creates Runtime-only
+private subnets and a Runtime security group, and the Runtime receives those
+plus the shared Runtime access security group. Adding a new agent should
+therefore create or update only that agent's foundation/runtime/target stacks
+and the shared endpoint stack's route-table coverage, without redeploying
+existing Runtime stacks.
+
 A public subnet route to an Internet Gateway is not sufficient egress for an
 AgentCore Runtime attached to the VPC unless the managed runtime is explicitly
-given public egress by the service. The low-cost validation posture avoids NAT
-by using private endpoints for the AWS services needed during `tools/call`:
-Secrets Manager for the database URI, Bedrock Runtime for model invocation, S3
-for artifacts/config, and CloudWatch Logs for observability.
+given public egress by the service. Private endpoints are the deployment
+baseline for Secrets Manager, Bedrock Runtime, S3, and CloudWatch Logs.
 
 The Runtime should keep startup lightweight. Provider libraries may be imported
 or initialized lazily on first tool invocation, but no model weights are loaded
@@ -754,8 +788,7 @@ because AgentCore Gateway owns the downstream target session mapping.
   `MCP-Protocol-Version` header. The AgentCore Gateway version is
   `2025-06-18`.
 - Use the exact IdP token `aud` claim as `jwt_allowed_audience`.
-- Prefer private VPC endpoints over NAT for low-cost validation when the
-  Runtime only needs AWS service egress.
+- Use private VPC endpoints for Runtime access to required AWS APIs.
 - Keep validation runtime lifecycle settings short, such as
   `idle_runtime_session_timeout=60` and `max_lifetime=900`, while recognizing
   that MCP pings or an open stream count as activity and can prevent idle

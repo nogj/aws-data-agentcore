@@ -40,15 +40,56 @@ def _placeholder_keys(parameters: dict[str, Any], instance: str) -> list[str]:
         "allowed_request_headers",
         "allowed_response_headers",
         "private_subnet_ids",
+        "vpc_id",
+        "endpoint_subnet_ids",
+        "endpoint_ingress_cidr",
+        "private_service_endpoint_stack_name",
+        "runtime_access_security_group_name",
+        "runtime_route_table_ids",
+        "create_private_service_endpoints",
+        "endpoint_security_group_name",
         "runtime_security_group_ids",
+        "runtime_network_mode",
+        "managed_private_subnet_cidr_1",
+        "managed_private_subnet_cidr_2",
+        "runtime_security_group_name",
+        "database_secret_mode",
+        "database_secret_name",
+        "database_secret_string",
         "idle_runtime_session_timeout",
         "max_lifetime",
         "target_credential_provider_type",
     }
     visible_parameters = _deployment_parameters(parameters, instance)
+    runtime_network_mode = visible_parameters.get("runtime_network_mode", "external")
+    database_secret_mode = visible_parameters.get("database_secret_mode", "external")
+    ignored: set[str] = set()
+    if runtime_network_mode == "managed":
+        ignored.update(
+            {
+                "private_subnet_ids",
+                "endpoint_subnet_ids",
+                "runtime_route_table_ids",
+                "runtime_security_group_ids",
+            }
+        )
+    else:
+        ignored.update(
+            {
+                "managed_private_subnet_cidr_1",
+                "managed_private_subnet_cidr_2",
+                "runtime_security_group_name",
+            }
+        )
+    if database_secret_mode == "managed":
+        ignored.add("database_secret_arn")
+    else:
+        ignored.update({"database_secret_name", "database_secret_string"})
     invalid: list[str] = []
     for key, value in visible_parameters.items():
         if key == "agents":
+            continue
+        if key in ignored:
             continue
         if key in overridable and key in parameters.get("agents", {}).get(instance, {}):
             value = parameters["agents"][instance][key]
@@ -161,6 +202,89 @@ def _validate_runtime_lifecycle(parameters: dict[str, Any]) -> None:
         raise SystemExit("idle_runtime_session_timeout must be <= max_lifetime")
 
 
+def _validate_runtime_network_parameters(parameters: dict[str, Any]) -> None:
+    runtime_network_mode = parameters.get("runtime_network_mode", "external")
+    if runtime_network_mode not in {"external", "managed"}:
+        raise SystemExit("runtime_network_mode must be external or managed")
+    if runtime_network_mode == "managed":
+        if not parameters.get("vpc_id"):
+            raise SystemExit("vpc_id is required when runtime_network_mode is managed")
+        if not parameters.get("managed_private_subnet_cidr_1"):
+            raise SystemExit(
+                "managed_private_subnet_cidr_1 is required when runtime_network_mode is managed"
+            )
+        return
+    if not parameters.get("private_subnet_ids"):
+        raise SystemExit("private_subnet_ids is required when runtime_network_mode is external")
+    if not parameters.get("runtime_security_group_ids"):
+        raise SystemExit(
+            "runtime_security_group_ids is required when runtime_network_mode is external"
+        )
+
+
+def _validate_private_endpoint_parameters(parameters: dict[str, Any]) -> None:
+    create_endpoints = str(
+        parameters.get("create_private_service_endpoints", "true")
+    ).lower()
+    if create_endpoints not in {"true", "false"}:
+        raise SystemExit("create_private_service_endpoints must be true or false")
+    if create_endpoints == "false":
+        return
+    runtime_network_mode = parameters.get("runtime_network_mode", "external")
+    if runtime_network_mode not in {"external", "managed"}:
+        raise SystemExit("runtime_network_mode must be external or managed")
+    if not parameters.get("vpc_id"):
+        raise SystemExit("vpc_id is required when create_private_service_endpoints is true")
+    if runtime_network_mode == "managed":
+        return
+    if not parameters.get("private_subnet_ids"):
+        raise SystemExit(
+            "private_subnet_ids is required when create_private_service_endpoints is true"
+        )
+    if not parameters.get("runtime_security_group_ids"):
+        raise SystemExit(
+            "runtime_security_group_ids is required when create_private_service_endpoints is true"
+        )
+
+
+def _validate_database_secret_parameters(
+    parameters: dict[str, Any], environment: str, instance: str
+) -> None:
+    database_secret_mode = parameters.get("database_secret_mode", "external")
+    if database_secret_mode not in {"external", "managed"}:
+        raise SystemExit("database_secret_mode must be external or managed")
+
+    expected_secret_path = f"/data-agent/{environment}/"
+    if database_secret_mode == "managed":
+        secret_name = parameters.get(
+            "database_secret_name", f"/data-agent/{environment}/{instance}/database"
+        )
+        if expected_secret_path not in secret_name:
+            raise SystemExit(
+                f"database_secret_name must be under /data-agent/{environment}/"
+            )
+        secret_string = parameters.get("database_secret_string")
+        if secret_string:
+            try:
+                secret_value = json.loads(secret_string)
+            except json.JSONDecodeError as exc:
+                raise SystemExit(
+                    f"database_secret_string must be valid JSON: {exc.msg}"
+                ) from exc
+            if not isinstance(secret_value, dict):
+                raise SystemExit("database_secret_string must be a JSON object")
+            if not isinstance(secret_value.get("database_uri"), str):
+                raise SystemExit("database_secret_string must include database_uri")
+        return
+
+    secret_arn = parameters.get("database_secret_arn", "")
+    expected_secret_arn_path = f":secret:{expected_secret_path}"
+    if expected_secret_arn_path not in secret_arn:
+        raise SystemExit(
+            f"database_secret_arn must be under /data-agent/{environment}/"
+        )
+
+
 def main() -> None:
     path = Path(sys.argv[1])
     environment = sys.argv[2]
@@ -181,6 +305,8 @@ def main() -> None:
     _validate_allowed_request_headers(parameters)
     _validate_allowed_response_headers(parameters)
     _validate_runtime_lifecycle(parameters)
+    _validate_runtime_network_parameters(parameters)
+    _validate_private_endpoint_parameters(parameters)
 
     required_scope = parameters.get("required_scope")
     authorization = config.get("authorization", {})
@@ -234,12 +360,7 @@ def main() -> None:
                 "ask_database.required_grants must include authorization.required_scope"
             )
 
-    secret_arn = parameters.get("database_secret_arn", "")
-    expected_secret_path = f":secret:/data-agent/{environment}/"
-    if expected_secret_path not in secret_arn:
-        raise SystemExit(
-            f"database_secret_arn must be under /data-agent/{environment}/"
-        )
+    _validate_database_secret_parameters(parameters, environment, instance)
 
     region = parameters.get("region", "")
     provider = config.get("llm", {}).get("provider")

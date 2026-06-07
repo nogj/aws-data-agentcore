@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Private AWS service endpoints required by AgentCore Runtime.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, pre, prod]
+  CreatePrivateServiceEndpoints:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  EndpointSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+  RuntimeSecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+  EndpointIngressCidr:
+    Type: String
+    Default: ""
+    Description: Optional CIDR allowed to reach interface endpoints. Leave empty to use the product Runtime access security group.
+  RuntimeRouteTableIds:
+    Type: CommaDelimitedList
+    Description: Route tables used by Runtime subnets. Required for the S3 gateway endpoint.
+  EndpointSecurityGroupName:
+    Type: String
+    Default: data-agent-runtime-vpc-endpoints
+  RuntimeAccessSecurityGroupName:
+    Type: String
+    Default: data-agent-runtime-endpoint-access
+
+Conditions:
+  CreateEndpoints: !Equals [!Ref CreatePrivateServiceEndpoints, "true"]
+  UseEndpointIngressCidr: !Not [!Equals [!Ref EndpointIngressCidr, ""]]
+
+Resources:
+  RuntimeAccessSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateEndpoints
+    Properties:
+      GroupName: !Sub "${RuntimeAccessSecurityGroupName}-${Environment}"
+      GroupDescription: Shared product security group attached to Runtimes that need private endpoint access.
+      VpcId: !Ref VpcId
+      SecurityGroupEgress: []
+      Tags:
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+
+  EndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateEndpoints
+    Properties:
+      GroupName: !Sub "${EndpointSecurityGroupName}-${Environment}"
+      GroupDescription: Private endpoints for AgentCore Runtime AWS service access.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - !If
+          - UseEndpointIngressCidr
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: !Ref EndpointIngressCidr
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            SourceSecurityGroupId: !Ref RuntimeAccessSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+
+  SecretsManagerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.secretsmanager"
+      SubnetIds: !Ref EndpointSubnetIds
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Name
+          Value: !Sub "data-agent-${Environment}-secretsmanager"
+
+  BedrockRuntimeEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.bedrock-runtime"
+      SubnetIds: !Ref EndpointSubnetIds
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Name
+          Value: !Sub "data-agent-${Environment}-bedrock-runtime"
+
+  LogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.logs"
+      SubnetIds: !Ref EndpointSubnetIds
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Name
+          Value: !Sub "data-agent-${Environment}-logs"
+
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      VpcEndpointType: Gateway
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      RouteTableIds: !Ref RuntimeRouteTableIds
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+            Resource: "*"
+      Tags:
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Name
+          Value: !Sub "data-agent-${Environment}-s3"
+
+Outputs:
+  RuntimeAccessSecurityGroupId:
+    Condition: CreateEndpoints
+    Value: !Ref RuntimeAccessSecurityGroup
+  EndpointSecurityGroupId:
+    Condition: CreateEndpoints
+    Value: !Ref EndpointSecurityGroup
+  SecretsManagerEndpointId:
+    Condition: CreateEndpoints
+    Value: !Ref SecretsManagerEndpoint
+  BedrockRuntimeEndpointId:
+    Condition: CreateEndpoints
+    Value: !Ref BedrockRuntimeEndpoint
+  LogsEndpointId:
+    Condition: CreateEndpoints
+    Value: !Ref LogsEndpoint
+  S3GatewayEndpointId:
+    Condition: CreateEndpoints
+    Value: !Ref S3GatewayEndpoint

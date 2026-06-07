@@ -7,11 +7,13 @@ DEFAULT_PARAMS="${ROOT}/infrastructure/parameters.${ENVIRONMENT}.json"
 [[ -f "${DEFAULT_PARAMS}" ]] || DEFAULT_PARAMS="${ROOT}/infrastructure/parameters.json"
 PARAMS="${PARAMS_FILE:-${DEFAULT_PARAMS}}"
 CONFIG_FILE="${CONFIG_FILE:-${ROOT}/config/data-agent.yaml}"
+DATA_AGENT_INSTANCE="${DATA_AGENT_INSTANCE:-data-agent}"
 
-python3 "${ROOT}/scripts/validate_parameters.py" "${PARAMS}" "${ENVIRONMENT}" "${CONFIG_FILE}"
+python3 "${ROOT}/scripts/validate_parameters.py" "${PARAMS}" "${ENVIRONMENT}" "${CONFIG_FILE}" "${DATA_AGENT_INSTANCE}"
 python3 "${ROOT}/scripts/preflight_aws.py" \
   --parameters "${PARAMS}" \
-  --config "${CONFIG_FILE}"
+  --config "${CONFIG_FILE}" \
+  --instance "${DATA_AGENT_INSTANCE}"
 
 read_param() {
   python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "${PARAMS}" "$1"

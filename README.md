@@ -41,7 +41,10 @@ aws-data-agentcore/
 ├── config/                  Versioned non-sensitive Runtime configuration
 ├── docs/                    Architecture, security, and setup guides
 ├── infrastructure/          CloudFormation stacks
+│   ├── agent-foundation.yaml Per-agent managed subnets, Runtime SG, and secret
 │   ├── bootstrap.yaml        Shared Gateway hub, bucket, interceptor, signing secret
+│   ├── private-endpoints.yaml
+│   │                         Private AWS service endpoints for Runtime access
 │   ├── runtime.yaml          One database Runtime instance
 │   ├── target.yaml           IAM GatewayTarget for Runtime MCP endpoint
 │   └── target-mcp-oauth-obo.yaml
@@ -64,6 +67,8 @@ The bootstrap stack is shared per environment:
 
 Each Runtime target is deployed separately:
 
+- optional per-agent managed subnets, Runtime security group, and database
+  secret
 - Runtime stack and AgentCore Runtime
 - Runtime IAM role
 - S3 artifact and config keys
@@ -74,6 +79,11 @@ Each Runtime target is deployed separately:
 
 The database deployment scripts create `GATEWAY_IAM_ROLE` Runtime targets. OBO
 targets use a dedicated deployment path and credential-provider configuration.
+Private AWS service endpoints are ensured before the Runtime by default. The
+deployment first looks for an existing product-managed endpoint stack in the
+same environment and VPC, reuses it when found, and otherwise creates one. Set
+`create_private_service_endpoints=false` only when equivalent endpoints and S3
+route table associations are managed outside the product.
 
 ## Prerequisites
 
@@ -81,8 +91,9 @@ targets use a dedicated deployment path and credential-provider configuration.
   Manager, Bedrock, AgentCore, and CloudWatch Logs.
 - Python 3.13 and `zip`.
 - A private VPC route to the target database.
-- VPC endpoints for S3, Secrets Manager, Bedrock Runtime, and CloudWatch Logs,
-  or an approved NAT/outbound route where required.
+- VPC ID. Runtime subnet IDs, Runtime security group IDs, and database secret
+  ARN can be supplied externally, or created per agent with
+  `runtime_network_mode=managed` and `database_secret_mode=managed`.
 - An OIDC/JWT provider for authenticating Gateway consumers.
 - Database-specific authorized views and a read-only technical role.
 
@@ -138,7 +149,7 @@ DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/smoke_test
 ```
 
 Per-instance infrastructure overrides live under `agents` in the parameter
-file:
+file. Existing network and secret resources can be supplied explicitly:
 
 ```json
 {
@@ -156,6 +167,51 @@ file:
   }
 }
 ```
+
+The product can also create its own per-agent Runtime subnets, Runtime security
+group, and database secret inside an existing VPC:
+
+```json
+{
+  "region": "eu-west-1",
+  "artifact_bucket_name": "corp-data-agent-artifacts",
+  "jwt_discovery_url": "https://login.example/.well-known/openid-configuration",
+  "jwt_allowed_audience": "api://data-agent",
+  "required_scope": "data:read",
+  "agents": {
+    "cmdb": {
+      "vpc_id": "vpc-123",
+      "runtime_network_mode": "managed",
+      "managed_private_subnet_cidr_1": "10.10.40.0/24",
+      "managed_private_subnet_cidr_2": "10.10.41.0/24",
+      "database_secret_mode": "managed",
+      "database_secret_name": "/data-agent/prod/cmdb/database"
+    }
+  }
+}
+```
+
+Managed foundation resources are deployed in a per-agent stack named
+`data-agent-foundation-<environment>-<instance>`, so adding or updating one
+agent does not redeploy existing agent Runtime stacks.
+
+For managed secrets, CloudFormation creates the secret resource and `deploy.sh`
+writes the validated `database_secret_string` afterward through Secrets
+Manager. Do not create a separate preexisting secret for the demo; pass the
+database URI as `database_secret_string` or through the example wrapper's
+`DATABASE_URI`.
+
+Private service endpoints are shared by environment and VPC. By default the
+stack name is `data-agent-private-endpoints-<environment>-<vpc-id>`, but older
+product endpoint stacks with the same VPC are reused automatically. Set
+`private_service_endpoint_stack_name` only when a specific product-managed
+endpoint stack must be selected.
+
+The endpoint stack creates a shared Runtime access security group and allows
+interface endpoint ingress from that SG. Each Runtime is launched with both its
+agent-specific Runtime SGs and this shared access SG, so new agents can use the
+existing product endpoints without opening endpoint access to the whole VPC.
+`endpoint_ingress_cidr` remains available only as an explicit override.
 
 See [Database Runtime](docs/database_runtime.md) for the full instance
 checklist and configuration contract.

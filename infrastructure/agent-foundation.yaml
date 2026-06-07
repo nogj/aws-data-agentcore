@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Per-agent foundation resources for managed Runtime networking and secrets.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, pre, prod]
+  AgentName:
+    Type: String
+    AllowedPattern: "[A-Za-z0-9_.-]{1,64}"
+  VpcId:
+    Type: String
+    Default: ""
+  RuntimeNetworkMode:
+    Type: String
+    AllowedValues: [external, managed]
+    Default: external
+  ManagedPrivateSubnetCidr1:
+    Type: String
+    Default: ""
+    Description: First private subnet CIDR created for this agent when RuntimeNetworkMode is managed.
+  ManagedPrivateSubnetCidr2:
+    Type: String
+    Default: ""
+    Description: Optional second private subnet CIDR created for this agent when RuntimeNetworkMode is managed.
+  RuntimeSecurityGroupName:
+    Type: String
+    Default: ""
+  DatabaseSecretMode:
+    Type: String
+    AllowedValues: [external, managed]
+    Default: external
+  DatabaseSecretName:
+    Type: String
+    Default: ""
+
+Conditions:
+  ManagedRuntimeNetwork: !Equals [!Ref RuntimeNetworkMode, managed]
+  HasSecondManagedSubnet: !And
+    - !Condition ManagedRuntimeNetwork
+    - !Not [!Equals [!Ref ManagedPrivateSubnetCidr2, ""]]
+  UseExplicitRuntimeSecurityGroupName: !Not [!Equals [!Ref RuntimeSecurityGroupName, ""]]
+  ManagedDatabaseSecret: !Equals [!Ref DatabaseSecretMode, managed]
+  UseExplicitDatabaseSecretName: !Not [!Equals [!Ref DatabaseSecretName, ""]]
+
+Resources:
+  RuntimeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: ManagedRuntimeNetwork
+    Properties:
+      GroupName: !If
+        - UseExplicitRuntimeSecurityGroupName
+        - !Ref RuntimeSecurityGroupName
+        - !Sub "data-agent-${Environment}-${AgentName}-runtime"
+      GroupDescription: !Sub "AgentCore Runtime access for ${AgentName}."
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Agent
+          Value: !Ref AgentName
+
+  ManagedPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Condition: ManagedRuntimeNetwork
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Ref ManagedPrivateSubnetCidr1
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "data-agent-${Environment}-${AgentName}-runtime-a"
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Agent
+          Value: !Ref AgentName
+
+  ManagedPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: HasSecondManagedSubnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Ref ManagedPrivateSubnetCidr2
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "data-agent-${Environment}-${AgentName}-runtime-b"
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Agent
+          Value: !Ref AgentName
+
+  ManagedRuntimeRouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: ManagedRuntimeNetwork
+    Properties:
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "data-agent-${Environment}-${AgentName}-runtime"
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Agent
+          Value: !Ref AgentName
+
+  ManagedPrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: ManagedRuntimeNetwork
+    Properties:
+      SubnetId: !Ref ManagedPrivateSubnet1
+      RouteTableId: !Ref ManagedRuntimeRouteTable
+
+  ManagedPrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: HasSecondManagedSubnet
+    Properties:
+      SubnetId: !Ref ManagedPrivateSubnet2
+      RouteTableId: !Ref ManagedRuntimeRouteTable
+
+  DatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: ManagedDatabaseSecret
+    Properties:
+      Name: !If
+        - UseExplicitDatabaseSecretName
+        - !Ref DatabaseSecretName
+        - !Sub "/data-agent/${Environment}/${AgentName}/database"
+      Description: !Sub "Connection secret for ${AgentName} external data system."
+      SecretString: "{}"
+      Tags:
+        - Key: Application
+          Value: data-agent
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Agent
+          Value: !Ref AgentName
+
+Outputs:
+  RuntimeSecurityGroupIds:
+    Value: !If [ManagedRuntimeNetwork, !Ref RuntimeSecurityGroup, ""]
+  PrivateSubnetIds:
+    Value: !If
+      - ManagedRuntimeNetwork
+      - !If
+        - HasSecondManagedSubnet
+        - !Join [",", [!Ref ManagedPrivateSubnet1, !Ref ManagedPrivateSubnet2]]
+        - !Ref ManagedPrivateSubnet1
+      - ""
+  RuntimeRouteTableIds:
+    Value: !If [ManagedRuntimeNetwork, !Ref ManagedRuntimeRouteTable, ""]
+  DatabaseSecretArn:
+    Value: !If [ManagedDatabaseSecret, !Ref DatabaseSecret, ""]
