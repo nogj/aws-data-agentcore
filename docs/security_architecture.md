@@ -1,7 +1,17 @@
 # Security Architecture
 
 This document describes the security architecture of the modular tool hub
-deployed with Amazon Bedrock AgentCore Gateway and AgentCore Runtime.
+deployed with Amazon Bedrock AgentCore Gateway and AgentCore Runtime. It focuses
+on trust boundaries, threat mitigations, and production controls.
+
+Layer-specific operational details live in:
+
+- [Gateway hub](gateway_hub.md) for shared Gateway, interceptor, target, and
+  identity-mode contracts.
+- [Database Runtime](database_runtime.md) for `ask_database`, SQL validation,
+  PostgreSQL preparation, and multiple database-agent instances.
+- [Microsoft Entra ID setup](entra_id_setup.md) for a practical OIDC provider
+  setup and token validation flow.
 
 The first implemented module is the read-only database capability,
 `ask_database`. The same Gateway is intended to evolve into a hub for other
@@ -81,9 +91,8 @@ sequenceDiagram
     Runtime->>DB: Execute validated SELECT as fixed read-only role
     DB-->>Runtime: Rows
     Runtime->>Runtime: Normalize, redact, and bound rows
-    Runtime->>LLM: Summarize bounded result set
-    LLM-->>Runtime: Natural-language answer
-    Runtime-->>Client: Answer, optional SQL when authorized
+    Runtime->>Runtime: Build deterministic JSON response
+    Runtime-->>Client: JSON answer, optional SQL when authorized
 ```
 
 ## Security Boundaries
@@ -203,7 +212,7 @@ When using the Entra v2 discovery document:
   that do not have Azure subscriptions.
 
 The practical two-app Entra setup is documented in
-`docs/entra_id_setup.md`.
+[Microsoft Entra ID setup](entra_id_setup.md).
 
 The hub configuration defines how inbound claims are interpreted before
 module-specific policy is applied:
@@ -271,6 +280,9 @@ Lambda artifact or add a CI check that verifies the inline `ZipFile` matches the
 canonical source.
 
 ## Capability And Target Model
+
+See [Gateway hub](gateway_hub.md) for the operational target contract. This
+section defines the security semantics that every target must preserve.
 
 Capabilities declare both authorization and downstream identity expectations.
 The current database capability is:
@@ -340,6 +352,10 @@ database target should not receive raw inbound bearer tokens.
 
 ## Source Organization
 
+See [Database Runtime](database_runtime.md) for the current implementation
+layout. The security requirement is that domain-specific guardrails stay local
+to their capability package unless they are truly shared by multiple modules.
+
 The Python source layout mirrors the hub model:
 
 ```text
@@ -350,7 +366,7 @@ app/
 └── capabilities/
     └── database/
         ├── database.py       SQLAlchemy execution and DB transaction controls
-        ├── llm.py            SQL generation and result summarization chains
+        ├── llm.py            SQL generation chain
         ├── models.py         Public tool and structured LLM models
         ├── security.py       Database-module input/output controls
         └── sql_validator.py  SQLGlot validation for generated SQL
@@ -383,6 +399,10 @@ Future modules should use similarly narrow grants:
 - `actions:approve` for high-impact tool execution approvals.
 
 ## Database Access Model
+
+This section summarizes database-specific security boundaries. See
+[Database Runtime](database_runtime.md) for the deployment checklist and
+configuration details.
 
 This section is specific to the database module. Other modules must define
 equivalent resource-local controls for their own downstream systems.
@@ -462,7 +482,13 @@ After database execution, rows are normalized:
 - denied columns are removed;
 - cell length is capped;
 - configured redaction patterns are applied;
-- only a bounded subset is sent for summarization.
+- common database scalar types, including timestamps and decimals, are converted
+  to JSON-compatible values;
+- only a bounded subset is returned to the caller.
+
+The database module returns deterministic JSON from normalized rows and does not
+make a second LLM call to summarize the result set. This keeps the LLM outside
+the final answer-construction path after SQL generation and validation.
 
 Operational rejection and error messages are fixed configuration values and do
 not invoke the LLM.
@@ -551,6 +577,10 @@ review, without using it as the only authorization control.
 
 ## Adding Gateway Targets
 
+See [Gateway hub](gateway_hub.md) for the target templates and current
+deployment boundary. This section captures the security review requirements for
+new modules.
+
 Additional targets should be treated as new security modules. They should not
 inherit the database target contract by default. Each target should define:
 
@@ -561,8 +591,8 @@ inherit the database target contract by default. Each target should define:
 - allowed request headers;
 - credential provider configuration when OBO is needed;
 - audit fields;
-- data minimization rules.
-- deterministic guardrails for its domain.
+- data minimization rules;
+- deterministic guardrails for its domain;
 - resource-specific residual risks.
 
 AgentCore Identity is a shared hub capability for targets that require

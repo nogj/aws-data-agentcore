@@ -26,19 +26,6 @@ prompts:
       User question: {question}
       Explicit context: {context}
       Maximum row limit: {max_rows}
-  result_summary:
-    system: |
-      Answer a CMDB question using only the provided results.
-      Always answer in the same language as the user's question.
-      Do not invent data, distinguish absence of data from uncertainty, and do
-      not mention secrets or unnecessary internal implementation details.
-      Write every warning in the same language as the user's question.
-      When truncated is true, include a warning that the output was truncated.
-    user: |
-      User question: {question}
-      Assumptions: {assumptions}
-      Results: {rows}
-      Truncated: {truncated}
 messages:
   rejected: I cannot handle that request safely.
   error: The request could not be completed. Use the trace identifier for support.

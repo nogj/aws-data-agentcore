@@ -18,11 +18,10 @@ def test_all_llm_prompts_are_loaded_from_configuration() -> None:
 
     assert "{schema_context}" in config.prompts.sql_generation.system
     assert "{question}" in config.prompts.sql_generation.user
-    assert "{truncated}" in config.prompts.result_summary.user
 
 
-def test_summary_prompt_requires_question_language() -> None:
-    prompt = load_config().prompts.result_summary.system.lower()
+def test_sql_generation_prompt_requires_question_language_for_assumptions() -> None:
+    prompt = load_config().prompts.sql_generation.system.lower()
 
     assert "same language" in prompt
     assert "spanish" not in prompt

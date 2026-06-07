@@ -1,32 +1,79 @@
-# Read-Only Data Agent MCP for Amazon Bedrock AgentCore
+# AWS Data AgentCore
 
-Production package for deploying a modular AgentCore tool hub, with the first
-implemented module being a reusable read-only database data agent.
+Modular tool hub for Amazon Bedrock AgentCore. The repository contains the
+shared Gateway foundation plus the first supported target Runtime: a read-only
+database agent exposed as the MCP tool `ask_database`.
 
-AgentCore Gateway is intended to act as the hub for multiple tool targets with
-different authorization and downstream identity models. The first Runtime target
-exposes one public tool, `ask_database`. SQLAlchemy Core provides the database
-execution abstraction without an internal subprocess. The database domain,
-authorized relations, glossary, prompts, and business terminology live only in
-`config/data-agent.yaml`.
+The key design point is separation of concerns:
 
-## Contents
+- **Gateway hub**: authenticates callers, routes MCP tool traffic, propagates a
+  bounded authorization context, and hosts multiple targets in one environment.
+- **Runtime targets**: implement one capability contract each, with their own
+  IAM role, secrets, network posture, configuration, and deterministic
+  guardrails.
+- **Database Runtime**: the first concrete target. It turns natural-language
+  questions into validated read-only SQL, executes through SQLAlchemy Core, and
+  returns bounded deterministic JSON.
+
+## Documentation Map
+
+Start here, then follow the document that matches the layer you are changing:
+
+| Document | Use For |
+| --- | --- |
+| [Gateway hub](docs/gateway_hub.md) | Shared Gateway, JWT/OIDC authorization, request interceptor, target contracts, service vs OBO identity modes. |
+| [Database Runtime](docs/database_runtime.md) | `ask_database`, config schema, SQL validation, PostgreSQL preparation, multiple database-agent instances. |
+| [Security architecture](docs/security_architecture.md) | End-to-end trust boundaries, threat model, IAM roles, residual risks, production controls. |
+| [Microsoft Entra ID setup](docs/entra_id_setup.md) | Practical Entra two-app setup, scopes/app roles, token validation, smoke-test token flow. |
+
+## Repository Layout
 
 ```text
 aws-data-agentcore/
-├── app/                     Shared runtime code
-│   └── capabilities/        Tool modules behind the Gateway hub
-│       └── database/        Read-only database capability
-├── config/                  Versioned non-sensitive configuration for S3
-├── docs/                    Architecture and design notes
-├── infrastructure/          CloudFormation for bootstrap, Runtime, and target
-├── postgres/                Generic read-only PostgreSQL permission templates
-├── scripts/                 Build, publication, and deployment scripts
+├── app/                     Runtime Python code
+│   ├── authorization.py      Shared trusted-header and grant helpers
+│   ├── audit.py              Shared structured audit helper
+│   ├── config.py             Shared validated configuration model
+│   └── capabilities/
+│       └── database/         Read-only database capability implementation
+├── config/                  Versioned non-sensitive Runtime configuration
+├── docs/                    Architecture, security, and setup guides
+├── infrastructure/          CloudFormation stacks
+│   ├── bootstrap.yaml        Shared Gateway hub, bucket, interceptor, signing secret
+│   ├── runtime.yaml          One database Runtime instance
+│   ├── target.yaml           IAM GatewayTarget for Runtime MCP endpoint
+│   └── target-mcp-oauth-obo.yaml
+│                            Candidate template for future OBO MCP targets
+├── postgres/                Generic PostgreSQL read-only templates
+├── scripts/                 Build, publish, deploy, CLI, and smoke-test tools
 └── tests/                   Unit tests for critical controls
 ```
 
-See [docs/security_architecture.md](docs/security_architecture.md) for the
-detailed security architecture.
+## What Is Shared And What Is Per Target
+
+The bootstrap stack is shared per environment:
+
+- AgentCore Gateway
+- Gateway IAM role
+- JWT/OIDC authorizer settings
+- request interceptor Lambda
+- header-signing secret
+- versioned artifact/config bucket
+
+Each Runtime target is deployed separately:
+
+- Runtime stack and AgentCore Runtime
+- Runtime IAM role
+- S3 artifact and config keys
+- target-specific secrets
+- subnet and security-group settings
+- GatewayTarget registration
+- capability configuration and guardrails
+
+The current deployment scripts support database Runtime targets using
+`GATEWAY_IAM_ROLE`. Future OBO targets should use their own deployment path and
+credential-provider configuration rather than broadening the database target
+contract.
 
 ## Prerequisites
 
@@ -34,88 +81,24 @@ detailed security architecture.
   Manager, Bedrock, AgentCore, and CloudWatch Logs.
 - Python 3.13 and `zip`.
 - A private VPC route to the target database.
-- NAT or equivalent outbound connectivity when using OpenAI.
-- VPC endpoints for S3, Secrets Manager, and Bedrock are recommended. For
-  private Runtime subnets without NAT, the S3 gateway endpoint must be
-  associated with the effective route table used by those subnets so AgentCore
-  can fetch the deployed ZIP and configuration before Python starts.
+- VPC endpoints for S3, Secrets Manager, Bedrock Runtime, and CloudWatch Logs,
+  or an approved NAT/outbound route where required.
 - An OIDC/JWT provider for authenticating Gateway consumers.
 - Database-specific authorized views and a read-only technical role.
 
-## Design
+OpenAI is supported only after an explicit data-governance decision. Bedrock is
+the default provider.
 
-- Direct Python ZIP deployment from S3, without containers.
-- Linux arm64 dependencies packaged in an artifact below the 250 MB limit.
-- Secrets stored in Secrets Manager; S3 contains only artifacts and
-  non-sensitive configuration.
-- Stateless and cache-free operation.
-- Bedrock as the default provider. OpenAI remains selectable only after an
-  explicit data-governance decision.
-- Business answers, assumptions, and warnings use the language of the question.
-- Rejection and operational error messages are fixed configuration values and
-  never invoke an LLM.
-- All LLM prompts are loaded from versioned configuration.
-- Security does not depend on the LLM. For the database module, SQLGlot
-  validates SQL and the database enforces read-only permissions again. Future
-  modules must define equivalent deterministic guardrails for their own domain.
-- Database-specific transaction controls are implemented as explicit adapters.
-  PostgreSQL is the first supported adapter.
-- Gateway validates the required JWT scope and a managed request interceptor
-  propagates validated grants and bounded caller identity to target runtimes.
-  Each target still fails closed when trusted authorization context is absent.
-- Gateway targets are managed by CloudFormation for rollback, drift detection,
-  and clean deletion. The database target stack is deployed after the Runtime so
-  the MCP endpoint can contain the URL-encoded Runtime ARN required by
-  AgentCore.
-
-## Preparation
+## Quick Deployment Flow
 
 1. Configure the database specialization in `config/data-agent.yaml`.
-2. Create database-specific security-barrier views that expose only approved
-   columns and relationships.
-3. Apply the generic PostgreSQL templates in `postgres/` using your approved
-   database, schema, role names, and the concrete authorized view list.
-4. Create the database secret. For a single `data-agent` deployment, one secret
-   is enough:
-
-```bash
-aws secretsmanager create-secret \
-  --name /data-agent/prod/database \
-  --secret-string '{"database_uri":"postgresql+psycopg://ROLE:REPLACE@db.internal:5432/DATABASE?sslmode=verify-full"}'
-
-```
-
-For multiple database agents, create one database secret per instance so each
-Runtime receives only its own connection string and read-only role:
-
-```bash
-aws secretsmanager create-secret \
-  --name /data-agent/prod/cmdb \
-  --secret-string '{"database_uri":"postgresql+psycopg://CMDB_ROLE:REPLACE@cmdb.internal:5432/CMDB?sslmode=verify-full"}'
-
-aws secretsmanager create-secret \
-  --name /data-agent/prod/assets \
-  --secret-string '{"database_uri":"postgresql+psycopg://ASSETS_ROLE:REPLACE@assets.internal:5432/ASSETS?sslmode=verify-full"}'
-```
-
-Reference those ARNs under `agents.<instance>.database_secret_arn` in the
-parameter file. Secret names must stay under `/data-agent/<environment>/` so the
-Runtime IAM policy and deployment validation remain aligned.
-
-5. Complete `infrastructure/parameters.json` or create an equivalent file per
-   environment. Deployment scripts use `parameters.<environment>.json` when it
-   exists and otherwise fall back to `parameters.json`. They stop before
-   deployment if any `REPLACE` marker remains or if the scope, secret path, or
-   Bedrock model geography is inconsistent.
-   The committed `parameters.json` is a template and is not expected to deploy
-   unchanged.
-
-6. Only when OpenAI has been approved for the configured data classification,
-   create `/data-agent/<environment>/openai`, set `llm.provider: openai`, and
-   add `openai_secret_arn` to the parameter file. `deploy.sh` passes it to the
-   Runtime stack.
-
-## Build And Deployment
+2. Create approved database views and apply the PostgreSQL templates under
+   `postgres/`.
+3. Create a Secrets Manager database secret under
+   `/data-agent/<environment>/<instance>`.
+4. Complete `infrastructure/parameters.json` or an environment-specific
+   `parameters.<environment>.json`.
+5. Build, publish, deploy, and smoke test:
 
 ```bash
 ./scripts/bootstrap.sh prod
@@ -127,50 +110,23 @@ export CONFIG_KEY=config/prod/data-agent-REPLACE.yaml
 ./scripts/smoke_test.sh prod
 ```
 
-`build.sh` uses `pip --platform manylinux2014_aarch64` to create a compatible
-AgentCore Runtime ZIP. Run it in CI and retain the checksum generated in
-`dist/`.
+`publish.sh` prints the exact `ARTIFACT_KEY` and `CONFIG_KEY` values to export
+before `deploy.sh`. The committed parameter file is a template and is not
+expected to deploy unchanged.
 
-`publish.sh` prints the exact `ARTIFACT_KEY` and `CONFIG_KEY` values required by
-`deploy.sh`. It also publishes a versioned manifest and
-`manifests/<environment>/active.json` containing the artifact SHA-256.
+## Database Runtime Instance Example
 
-`bootstrap.sh` runs an AWS preflight that confirms the configured subnets and
-security groups exist and belong to one VPC, the database secret exists, and
-the Bedrock inference profile can be resolved from the configured Region. A
-successful Runtime deployment and smoke test are still required to prove
-AgentCore AZ support, service endpoint access, S3 artifact/config access, and
-database connectivity.
-
-`smoke_test.sh` performs both MCP discovery and an actual `tools/call` to
-`ask_database`. Override the safe question with `SMOKE_QUESTION` and the row
-bound with `SMOKE_MAX_ROWS`.
-
-For manual validation, use the interactive CLI against the deployed Gateway:
+For the default `data-agent` instance, one database secret is enough:
 
 ```bash
-export BEARER_TOKEN="$(az account get-access-token \
-  --tenant REPLACE_TENANT_ID \
-  --scope api://REPLACE_API_APP_ID/data:read \
-  --query accessToken \
-  --output tsv)"
-./scripts/agent_cli.sh prod
+aws secretsmanager create-secret \
+  --name /data-agent/prod/database \
+  --secret-string '{"database_uri":"postgresql+psycopg://ROLE:REPLACE@db.internal:5432/DATABASE?sslmode=verify-full"}'
 ```
 
-The CLI keeps a stable `Mcp-Session-Id` for the interactive process. If the
-Gateway does not return a session header, the CLI generates one locally and
-reuses it for all questions so AgentCore Runtime can route those calls to the
-same microVM while the Runtime session remains alive. Use `:help` inside the
-prompt to list local commands.
-
-## Multiple Database Agents
-
-The Gateway is shared. Each database agent should be deployed as a separate
-Runtime and GatewayTarget with its own config file, database secret, target
-name, Runtime IAM role, grants, and authorized data model. The default
-`data-agent` instance keeps the default stack names and S3 key layout.
-
-For a second database agent:
+For multiple database agents, deploy one Runtime and GatewayTarget per
+instance. Each instance should have its own config file, database secret,
+read-only database role, Runtime IAM role, and authorized data model:
 
 ```bash
 ./scripts/build.sh
@@ -181,22 +137,8 @@ DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/deploy.sh 
 DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/smoke_test.sh prod
 ```
 
-`DATA_AGENT_INSTANCE` drives the Runtime stack suffix, target name, manifest
-prefix, per-instance Runtime IAM role name, and smoke-test target selection.
-Override `TARGET_NAME` only if the Gateway target name should differ from the
-instance name. `deploy.sh` always lets `infrastructure/runtime.yaml` create the
-per-instance Runtime IAM role. `smoke_test.sh` initializes and closes any MCP
-session returned by the Gateway. Interactive clients should reuse a stable
-`Mcp-Session-Id` across questions to preserve Runtime microVM affinity.
-
-Prompts are also per instance. Each Runtime receives its own `CONFIG_KEY`, so
-the `prompts.sql_generation` and `prompts.result_summary` sections in
-`CONFIG_FILE` are scoped to that database agent. Use separate config files when
-different databases need different prompt wording, glossary, synonyms, SQL
-rules, row limits, or authorized data models.
-
-Per-agent infrastructure settings can live under `agents` in the parameter
-file. Agent-specific values override the top-level defaults:
+Per-instance infrastructure overrides live under `agents` in the parameter
+file:
 
 ```json
 {
@@ -210,46 +152,35 @@ file. Agent-specific values override the top-level defaults:
       "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/prod/cmdb",
       "private_subnet_ids": "subnet-a,subnet-b",
       "runtime_security_group_ids": "sg-cmdb"
-    },
-    "assets": {
-      "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/prod/assets",
-      "private_subnet_ids": "subnet-a,subnet-b",
-      "runtime_security_group_ids": "sg-assets"
     }
   }
 }
 ```
 
-Checklist for adding a new database agent:
+See [Database Runtime](docs/database_runtime.md) for the full instance
+checklist and configuration contract.
 
-- Create database-specific security-barrier views that expose only approved
-  relations and columns.
-- Create a dedicated read-only database role for that agent and grant it only
-  the approved views.
-- Create a Secrets Manager secret under `/data-agent/<environment>/<instance>`
-  containing that role's connection string.
-- Create a dedicated config YAML with the instance's prompts, data model,
-  glossary, synonyms, SQL rules, query limits, and capability grants.
-- Add `agents.<instance>` overrides to the parameter file for the database
-  secret, subnets, and security groups when they differ from the defaults.
-- Run `build.sh` once for the code artifact.
-- Run `publish.sh` with `DATA_AGENT_INSTANCE=<instance>` and
-  `CONFIG_FILE=<path-to-config>`.
-- Export the printed `ARTIFACT_KEY` and `CONFIG_KEY`, then run `deploy.sh` with
-  the same `DATA_AGENT_INSTANCE` and `CONFIG_FILE`.
-- Run `smoke_test.sh` for the instance and verify the Gateway lists/calls the
-  intended target.
-- Review audit logs, database query logs, and IAM/secret access before broad
-  access is granted.
+## Manual Gateway CLI
 
-Versioned artifacts and configuration keys are published immutably. Use
-`scripts/cleanup_artifacts.py` to remove keys that are not referenced by the
-active manifest, the retained manifest window, or the currently deployed
-Runtime stack parameters. It runs as a dry run unless `--apply` is passed.
+After deployment, use a bearer token for the configured OIDC provider:
 
-## Configuration
+```bash
+export BEARER_TOKEN="$(az account get-access-token \
+  --tenant REPLACE_TENANT_ID \
+  --scope api://REPLACE_API_APP_ID/data:read \
+  --query accessToken \
+  --output tsv)"
+./scripts/agent_cli.sh prod
+```
 
-The runtime receives only bootstrap references:
+The CLI keeps a stable `Mcp-Session-Id` for the interactive process. This helps
+AgentCore Runtime reuse the same microVM while the Runtime session remains
+alive; authorization still relies on Gateway JWT validation and signed
+`x-data-agent-*` headers.
+
+## Configuration Summary
+
+The Runtime receives only bootstrap references through environment variables:
 
 - `CONFIG_BUCKET`
 - `CONFIG_KEY`
@@ -259,266 +190,36 @@ The runtime receives only bootstrap references:
 - `APP_ENV`
 - `AWS_REGION`
 
-The `database` section selects the SQLAlchemy execution adapter, SQLGlot
-dialect, connection arguments, and statement timeout. The `data_model` section
-defines the database-specific authorized relations, columns, descriptions,
-glossary, synonyms, SQL rules, and allowed SQL functions. Functions fail closed:
-any function not listed in `allowed_functions` is rejected. The `prompts`
-section contains SQL generation and result summarization instructions.
+`config/data-agent.yaml` is non-sensitive and versioned in S3. It contains
+model selection, prompts for SQL generation, database dialect settings,
+authorization policy, capability declarations, authorized relations, query
+limits, output controls, and observability settings.
 
-Optional `context` input is bounded by item count and key/value length before it
-can be included in a prompt. SQL columns are validated against their configured
-relation rather than a global union of authorized columns.
+These values can change without rebuilding the ZIP as long as the expected
+configuration contract remains stable.
 
-`query.timeout_seconds` bounds the complete request path after basic validation:
-SQL generation, database execution, and result summarization. The database has
-its own `statement_timeout_ms`, and each LLM provider receives
-`llm.timeout_seconds` where supported. Keep the global query timeout greater
-than the database statement timeout plus operational margin, because cancelling
-the async request does not forcibly stop a synchronous DB thread before the
-database-side timeout fires.
+## Development
 
-Supporting another database requires its SQLAlchemy driver, a matching SQLGlot
-dialect, and an adapter in `app/capabilities/database/database.py` that applies
-equivalent read-only and timeout controls. Unsupported dialects fail closed.
+Run tests from the repository root:
 
-These sections can change without rebuilding the ZIP as long as their expected
-contract remains stable.
-
-Gateway validates inbound JWTs, including the configured `required_scope`.
-The deployed request interceptor derives the `x-data-agent-grants` header from
-configured JWT claims and replaces any value supplied by a consumer. It also
-emits a bounded `x-data-agent-identity` header containing only the configured
-identity claims. The interceptor signs those internal headers with a shared
-Secrets Manager secret and the Runtime rejects unsigned, stale, or tampered
-headers before evaluating grants. By default, in `scopes` mode, it accepts only
-`scope` and `scp` as grants and propagates `sub`, `oid`, `preferred_username`,
-`appid`, `azp`, and `tid` for audit. `roles` is reserved for `claims` mode. The
-Runtime also requires the configured grant, so missing propagation denies access.
-
-`authorization.mode` controls where the required grant is enforced first:
-
-- `scopes`: Gateway also sets `AllowedScopes`. Use this for delegated OAuth
-  scopes such as Entra `scp`. Accepted claims must be limited to `scope` and
-  `scp`.
-- `claims`: Gateway validates issuer and audience only; the managed interceptor
-  and Runtime enforce `required_scope` from configured claims such as Entra
-  `roles`. Use this for client-credentials flows with application roles.
-  Accepted claims must be `roles`.
-
-## Microsoft Entra ID
-
-Use Entra ID as the OIDC provider for the AgentCore Gateway:
-
-```json
-{
-  "jwt_discovery_url": "https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration",
-  "jwt_allowed_audience": "<access-token-aud-claim>",
-  "required_scope": "data:read"
-}
+```bash
+python3 -m pytest
 ```
 
-Recommended Entra setup:
+Useful implementation boundaries:
 
-- Create an App Registration for the API exposed by this agent.
-- Set an Application ID URI such as `api://<api-app-id>`.
-- Set the API app manifest value `api.requestedAccessTokenVersion` to `2` when
-  using the v2 discovery document.
-- For delegated user flows, expose scopes such as `data:read` and
-  `data:sql:read`; Entra emits these in the `scp` claim.
-- For client-credentials flows, define app roles with the same values; Entra
-  emits these in the `roles` claim.
-- Grant and consent the client applications that will call the Gateway.
+- Put new domain modules under `app/capabilities/<module>/`.
+- Promote code to top-level `app/` only when at least two modules need it.
+- Keep target-specific guardrails local to the capability package.
+- Keep Gateway/OBO setup out of the database Runtime path unless the target
+  actually needs delegated downstream access.
 
-Always decode one real access token and set `jwt_allowed_audience` to its exact
-`aud` claim. With Entra v2 tokens this is often the API application client ID,
-even when clients request `api://<api-app-id>/data:read`.
+## Artifact Cleanup
 
-Gateway `AllowedScopes` validates delegated scopes. Application roles are
-enforced by the managed interceptor and the Runtime using the configured
-`authorization.accepted_claims`. Keep `required_scope` aligned with either the
-delegated scope value or the app role value you assign in Entra.
-
-For delegated user flow, keep:
-
-```yaml
-authorization:
-  mode: scopes
-  required_scope: data:read
-  accepted_claims: [scp, scope]
-```
-
-For client credentials with app roles, use:
-
-```yaml
-authorization:
-  mode: claims
-  required_scope: data:read
-  accepted_claims: [roles]
-```
-
-See [Microsoft Entra ID Setup Guide](docs/entra_id_setup.md) for a practical
-two-app configuration guide with scopes, consent, token validation, and smoke
-testing.
-
-Changing `authorization.mode` or `accepted_claims` affects the Gateway
-interceptor environment and requires redeploying the bootstrap stack, not only
-publishing a new S3 configuration file.
-
-## Hub Capability Model
-
-The `capabilities` section declares the authorization and downstream identity
-mode expected by each exposed tool or Gateway target. The Gateway is the hub;
-each target is a module with its own grants, identity mode, allowed headers,
-audit contract, and domain guardrails.
-
-```yaml
-capabilities:
-  - name: ask_database
-    target: data-agent
-    identity_mode: service
-    required_grants: [data:read]
-    sql_viewer_grant: data:sql:read
-```
-
-`identity_mode: service` means the target uses its own technical identity for
-downstream access. `ask_database` uses this mode: Gateway authorizes the caller,
-but PostgreSQL sees the fixed read-only database role from Secrets Manager.
-
-Use `identity_mode: on_behalf_of_user` for future capabilities that must access
-downstream systems with the caller's delegated authority, such as SharePoint,
-Jira, Salesforce, or an internal API with user-level authorization. Such
-capabilities must declare a `downstream_audience` and should use a dedicated
-AgentCore Identity resource credential provider for token exchange or an
-equivalent approved OBO pattern. Do not pass raw bearer tokens to every target
-as a generic convenience; only the target that performs OBO should receive the
-minimum token/context required for that exchange.
-
-AgentCore Identity is treated as a common hub capability for targets that need
-OBO, not as a mandatory dependency for every target. The database agent remains
-`identity_mode: service` and does not use AgentCore Identity. Keep OBO credential
-providers target-scoped; `config/identity-providers.example.json` shows the
-expected inventory shape for future delegated-access targets.
-
-Recommended grant naming for additional targets:
-
-- `cmdb:read` for fixed-identity read-only data access.
-- `data:sql:read` for generated SQL visibility.
-- `kb:query` for querying an approved knowledge base.
-- `docs:read` for user-delegated document search.
-- `tickets:create` for user-delegated ticket creation.
-
-Each target should receive only the headers it needs. The current Runtime target
-allowlists `x-data-agent-grants` and `x-data-agent-identity`; future OBO targets
-should have their own GatewayTarget metadata and credential-provider
-configuration rather than broadening this target's contract.
-`infrastructure/target.yaml` is parameterized with
-`TargetName`, `TargetDescription`, and `AllowedRequestHeaders` for
-IAM-authorized AgentCore Runtime MCP targets. Keep the database target on this
-IAM template.
-
-For OBO targets, keep the capability declaration and the target credential
-provider aligned. The JSON below is planning metadata for dedicated OBO
-deployment automation, not input for the database-agent `deploy.sh` path:
-
-```yaml
-capabilities:
-  - name: search_user_documents
-    target: user-documents
-    identity_mode: on_behalf_of_user
-    required_grants: [docs:read]
-    downstream_audience: api://sharepoint-or-internal-docs
-    credential_provider_name: entra-docs-obo
-```
-
-```json
-{
-  "agents": {
-    "user-documents": {
-      "target_credential_provider_type": "OAUTH",
-      "oauth_provider_arn": "arn:aws:bedrock-agentcore:eu-west-1:111122223333:token-vault/default/oauth2credentialprovider/entra-docs-obo",
-      "oauth_scopes": "https://graph.microsoft.com/.default",
-      "oauth_grant_type": "TOKEN_EXCHANGE",
-      "allowed_request_headers": "x-data-agent-grants,x-data-agent-identity"
-    }
-  }
-}
-```
-
-`deploy.sh` is intentionally limited to database Runtime targets that use
-`GATEWAY_IAM_ROLE`; it rejects OAUTH/OBO target parameters so an OBO
-configuration cannot silently deploy as an IAM target. `infrastructure/target-mcp-oauth-obo.yaml`
-is a separate candidate template for MCP targets that need AgentCore
-Identity/outbound authorization. It keeps OBO credential-provider configuration
-out of the database target contract. When a target needs more than one OAuth
-scope, provide `OAuthScopes` as a comma-separated CloudFormation parameter
-because the template uses a `CommaDelimitedList`.
-
-This database agent keeps the MCP server stateless and does not require Gateway
-MCP sessions. The GatewayTarget deliberately propagates `Mcp-Session-Id` along
-with the signed authorization context headers so clients can provide a stable
-session identifier and AgentCore Runtime can reuse the same microVM. If Gateway
-MCP sessions are enabled for a different target, remove `Mcp-Session-Id` from
-that target's metadata because AgentCore Gateway then manages target sessions
-internally.
-
-Important implementation note: AgentCore Gateway documentation describes
-`TOKEN_EXCHANGE` for OBO targets, while CloudFormation reference material may
-lag or list only `AUTHORIZATION_CODE` and `CLIENT_CREDENTIALS` for the OAuth
-credential provider grant type. If `TOKEN_EXCHANGE` is not accepted by
-CloudFormation in the target Region/account, deploy OBO targets with the
-AgentCore API/CLI or a custom resource until CloudFormation support is aligned.
-The database agent does not depend on this path.
-
-OBO targets may also require additional Gateway role permissions for AgentCore
-Identity token vending. Use `infrastructure/gateway-identity-permissions.yaml`
-only when deploying OBO targets; it attaches `GetWorkloadAccessToken`,
-`GetResourceOauth2Token`, and an optional credential-provider secret read grant
-to the shared Gateway role. Do not deploy it for database-only environments.
-
-## Data Governance
-
-Query results are sent to the selected LLM to produce the natural-language
-answer. Bedrock is the default, but its use still requires review of data
-classification, regional processing, logging, retention, and model access.
-Enabling OpenAI additionally requires explicit approval for external-provider
-processing, data residency, contractual terms, and permitted fields.
-
-## Operational Boundaries
-
-`LIMIT` restricts returned rows, not the amount of work performed by a query.
-Production database preparation must include narrow security-barrier views,
-appropriate indexes, tested statement timeouts, the technical role connection
-limit, query monitoring, and preferably a read replica for analytical traffic.
-
-Gateway authentication and scope validation do not provide consumer quotas or
-cost budgets. Deploy rate limiting, per-consumer quotas, anomaly detection, and
-cost alarms in the approved ingress and monitoring architecture before broad
-access is granted.
-
-The artifact bucket never expires current objects automatically, because the
-Runtime may still reference a versioned artifact or configuration key.
-Noncurrent versions of overwritten keys expire after the configured retention
-period. Run the manifest-aware cleanup script for unreferenced versioned keys. The
-scope interceptor log group has explicit retention. Confirm and configure
-retention for AgentCore-managed Runtime and Gateway logs according to the
-organization logging standard.
-
-## Production Checklist
-
-- Review every configured relation and denied column.
-- Validate TLS, timeouts, and private connectivity against the target database.
-- Confirm every authorized view has an explicit `SELECT` grant to the technical
-  role and no broader relation access.
-- Review the SQL function allowlist and database function execution privileges.
-- Load test expensive joins and aggregations against representative data.
-- Confirm the Runtime VPC has the required AWS service endpoints and outbound
-  connectivity for the selected LLM provider.
-- Ensure the principal creating the first VPC Runtime can create
-  `AWSServiceRoleForBedrockAgentCoreNetwork`.
-- Review rate limits, quotas, cost alarms, log retention, and audit requirements.
-- Validate the treatment of data sent to any external LLM provider.
-- Test rollback of both artifact and configuration versions.
+Versioned artifacts and configuration keys are published immutably. Use
+`scripts/cleanup_artifacts.py` to remove keys that are not referenced by the
+active manifest, the retained manifest window, or the currently deployed
+Runtime stack parameters. It runs as a dry run unless `--apply` is passed.
 
 ## AWS References
 

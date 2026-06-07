@@ -47,7 +47,6 @@ class PromptsConfig(BaseModel):
     """All LLM instructions used by the agent."""
 
     sql_generation: PromptTemplateConfig
-    result_summary: PromptTemplateConfig
 
 
 class MessagesConfig(BaseModel):
