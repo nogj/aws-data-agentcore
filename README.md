@@ -43,6 +43,9 @@ aws-data-agentcore/
 ├── infrastructure/          CloudFormation stacks
 │   ├── agent-foundation.yaml Per-agent managed subnets, Runtime SG, and secret
 │   ├── bootstrap.yaml        Shared Gateway hub, bucket, interceptor, signing secret
+│   ├── gateway-identity-permissions.yaml
+│   │                         Optional Gateway permissions for OBO targets
+│   ├── parameters.json       Example parameter file
 │   ├── private-endpoints.yaml
 │   │                         Private AWS service endpoints for Runtime access
 │   ├── runtime.yaml          One database Runtime instance
@@ -105,8 +108,9 @@ the default provider.
 1. Configure the database specialization in `config/data-agent.yaml`.
 2. Create approved database views and apply the PostgreSQL templates under
    `postgres/`.
-3. Create a Secrets Manager database secret under
-   `/data-agent/<environment>/<instance>`.
+3. Decide whether the product manages Runtime network and database secret
+   resources. The demo and recommended database-agent flow use
+   `runtime_network_mode=managed` and `database_secret_mode=managed`.
 4. Complete `infrastructure/parameters.json` or an environment-specific
    `parameters.<environment>.json`.
 5. Build, publish, deploy, and smoke test:
@@ -127,12 +131,15 @@ expected to deploy unchanged.
 
 ## Database Runtime Instance Example
 
-For the default `data-agent` instance, one database secret is enough:
+For the default database-agent flow, the product creates the per-agent database
+secret and writes the connection JSON after the foundation stack exists:
 
-```bash
-aws secretsmanager create-secret \
-  --name /data-agent/prod/database \
-  --secret-string '{"database_uri":"postgresql+psycopg://ROLE:REPLACE@db.internal:5432/DATABASE?sslmode=verify-full"}'
+```json
+{
+  "database_secret_mode": "managed",
+  "database_secret_name": "/data-agent/prod/database/database",
+  "database_secret_string": "{\"database_uri\":\"postgresql+psycopg://ROLE:REPLACE@db.internal:5432/DATABASE?sslmode=verify-full\"}"
+}
 ```
 
 For multiple database agents, deploy one Runtime and GatewayTarget per
@@ -149,27 +156,7 @@ DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/smoke_test
 ```
 
 Per-instance infrastructure overrides live under `agents` in the parameter
-file. Existing network and secret resources can be supplied explicitly:
-
-```json
-{
-  "region": "eu-west-1",
-  "artifact_bucket_name": "corp-data-agent-artifacts",
-  "jwt_discovery_url": "https://login.example/.well-known/openid-configuration",
-  "jwt_allowed_audience": "api://data-agent",
-  "required_scope": "data:read",
-  "agents": {
-    "cmdb": {
-      "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/prod/cmdb",
-      "private_subnet_ids": "subnet-a,subnet-b",
-      "runtime_security_group_ids": "sg-cmdb"
-    }
-  }
-}
-```
-
-The product can also create its own per-agent Runtime subnets, Runtime security
-group, and database secret inside an existing VPC:
+file. Product-managed resources are the natural path for new database agents:
 
 ```json
 {
@@ -185,7 +172,30 @@ group, and database secret inside an existing VPC:
       "managed_private_subnet_cidr_1": "10.10.40.0/24",
       "managed_private_subnet_cidr_2": "10.10.41.0/24",
       "database_secret_mode": "managed",
-      "database_secret_name": "/data-agent/prod/cmdb/database"
+      "database_secret_name": "/data-agent/prod/cmdb/database",
+      "database_secret_string": "{\"database_uri\":\"postgresql+psycopg://ROLE:REPLACE@db.internal:5432/CMDB?sslmode=verify-full\"}"
+    }
+  }
+}
+```
+
+Existing network and secret resources can still be supplied explicitly when an
+environment has a separate ownership model:
+
+```json
+{
+  "region": "eu-west-1",
+  "artifact_bucket_name": "corp-data-agent-artifacts",
+  "jwt_discovery_url": "https://login.example/.well-known/openid-configuration",
+  "jwt_allowed_audience": "api://data-agent",
+  "required_scope": "data:read",
+  "agents": {
+    "cmdb": {
+      "database_secret_mode": "external",
+      "database_secret_arn": "arn:aws:secretsmanager:eu-west-1:111122223333:secret:/data-agent/prod/cmdb",
+      "runtime_network_mode": "external",
+      "private_subnet_ids": "subnet-a,subnet-b",
+      "runtime_security_group_ids": "sg-cmdb"
     }
   }
 }

@@ -165,10 +165,13 @@ Per-instance isolation boundaries:
 - **Configuration**: each instance receives its own `CONFIG_KEY`, including
   prompts, glossary, synonyms, data model, query limits, and capability grants.
 - **Database secret**: each instance receives its own `DATABASE_SECRET_ARN`.
+  In managed mode, the product creates the secret and writes the validated
+  connection JSON during deployment.
 - **Database role**: each instance should use a dedicated read-only database
   role whenever the read perimeter differs.
-- **Network posture**: subnet and security group values can be overridden per
-  instance through `agents.<instance>` parameters.
+- **Network posture**: each instance can use product-managed Runtime subnets and
+  a product-managed Runtime security group, or explicitly supplied external
+  network resources through `agents.<instance>` parameters.
 
 Shared boundaries:
 

@@ -214,7 +214,28 @@ prefix, per-instance foundation stack, per-instance Runtime IAM role name, and
 smoke-test target selection. Override `TARGET_NAME` only if the Gateway target
 name should differ from the instance name.
 
-Per-agent infrastructure can use external resources:
+Per-agent infrastructure should usually be product-managed for new database
+agents. The product creates Runtime-only subnets, the Runtime security group,
+and the database secret inside the target VPC:
+
+```json
+{
+  "agents": {
+    "cmdb": {
+      "vpc_id": "vpc-123",
+      "runtime_network_mode": "managed",
+      "managed_private_subnet_cidr_1": "10.10.40.0/24",
+      "managed_private_subnet_cidr_2": "10.10.41.0/24",
+      "database_secret_mode": "managed",
+      "database_secret_name": "/data-agent/prod/cmdb/database",
+      "database_secret_string": "{\"database_uri\":\"postgresql+psycopg://ROLE:REPLACE@db.internal:5432/CMDB?sslmode=verify-full\"}"
+    }
+  }
+}
+```
+
+External resources remain supported when subnets, security groups, or the
+database secret are owned outside the product:
 
 ```json
 {
@@ -230,23 +251,6 @@ Per-agent infrastructure can use external resources:
 }
 ```
 
-Or product-managed per-agent resources inside an existing VPC:
-
-```json
-{
-  "agents": {
-    "cmdb": {
-      "vpc_id": "vpc-123",
-      "runtime_network_mode": "managed",
-      "managed_private_subnet_cidr_1": "10.10.40.0/24",
-      "managed_private_subnet_cidr_2": "10.10.41.0/24",
-      "database_secret_mode": "managed",
-      "database_secret_name": "/data-agent/prod/cmdb/database"
-    }
-  }
-}
-```
-
 ## Instance Checklist
 
 Before deploying a new database agent:
@@ -254,16 +258,16 @@ Before deploying a new database agent:
 - Create database-specific security-barrier views that expose only approved
   relations and columns.
 - Create a dedicated read-only database role and grant only the approved views.
-- Create a Secrets Manager secret under `/data-agent/<environment>/<instance>`
-  containing that role's connection string, or set
-  `database_secret_mode=managed` and provide `database_secret_string` so the
-  product writes the created secret before deploying the Runtime.
+- Provide the read-only role connection string as
+  `database_secret_string` when `database_secret_mode=managed`. The product
+  creates the Secrets Manager secret and writes the validated JSON value before
+  deploying the Runtime. Use `database_secret_arn` only in `external` mode.
 - Create a dedicated config YAML with prompts, data model, glossary, synonyms,
   categorical values, SQL rules, query limits, output controls, and capability
   grants.
-- Add `agents.<instance>` overrides to the parameter file. Use `external` mode
-  for existing database secrets, subnets, and security groups, or `managed`
-  mode for product-owned per-agent subnets, Runtime security group, and secret.
+- Add `agents.<instance>` overrides to the parameter file. Use `managed` mode
+  for product-owned per-agent subnets, Runtime security group, and secret. Use
+  `external` mode only when those resources are managed outside the product.
 - Run `build.sh` once for the code artifact.
 - Run `publish.sh` with `DATA_AGENT_INSTANCE=<instance>` and
   `CONFIG_FILE=<path-to-config>`.
