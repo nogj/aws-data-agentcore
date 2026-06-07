@@ -1,5 +1,7 @@
 import yaml
 import json
+from datetime import datetime
+from decimal import Decimal
 
 from app.config import AppConfig
 from app.capabilities.database.security import (
@@ -84,4 +86,30 @@ def test_json_answer_serializes_rows_without_llm_summary() -> None:
         "rows": [{"ci_name": "aplicación", "criticality": "high"}],
         "truncated": False,
     }
+    assert json.loads(_json_answer(payload)) == payload
+
+
+def test_json_payload_converts_database_scalars_to_json_values() -> None:
+    payload = _json_payload(
+        rows=[
+            {
+                "ci_name": "Payments API",
+                "modified_at": datetime(2026, 6, 7, 9, 22, 1),
+                "score": Decimal("2.5"),
+                "count": Decimal("6"),
+            }
+        ],
+        row_count=1,
+        truncated=False,
+        assumptions=[],
+    )
+
+    assert payload["rows"] == [
+        {
+            "ci_name": "Payments API",
+            "modified_at": "2026-06-07T09:22:01",
+            "score": 2.5,
+            "count": 6,
+        }
+    ]
     assert json.loads(_json_answer(payload)) == payload

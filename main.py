@@ -16,6 +16,8 @@ import json
 import logging
 import os
 import uuid
+from datetime import date, datetime, time as datetime_time
+from decimal import Decimal
 from typing import Any
 
 _boot_log("stdlib imports complete")
@@ -138,11 +140,27 @@ def _json_payload(
     """Build deterministic query output without an LLM summarization pass."""
 
     return {
-        "rows": rows,
+        "rows": _json_safe(rows),
         "row_count": row_count,
         "truncated": truncated,
         "assumptions": assumptions,
     }
+
+
+def _json_safe(value: Any) -> Any:
+    """Convert database scalar values into JSON-compatible values."""
+
+    if isinstance(value, datetime | date | datetime_time):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 def _json_answer(

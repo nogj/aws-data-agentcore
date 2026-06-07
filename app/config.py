@@ -21,6 +21,7 @@ class DataModelConfig(BaseModel):
     denied_columns: list[str] = Field(default_factory=list)
     glossary: dict[str, str] = Field(default_factory=dict)
     synonyms: dict[str, str] = Field(default_factory=dict)
+    categorical_values: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     sql_rules: list[str] = Field(default_factory=list)
     allowed_functions: list[str] = Field(default_factory=list)
 

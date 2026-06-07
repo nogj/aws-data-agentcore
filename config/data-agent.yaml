@@ -127,6 +127,45 @@ data_model:
     servidor: server
     base de datos: database
     servicio: service
+    produccion: prod
+    preproduccion: pre
+    retirado: retired
+  categorical_values:
+    agent_cmdb.cis:
+      ci_type:
+        - application
+        - database
+        - server
+        - service
+      status:
+        - active
+        - degraded
+        - inactive
+      criticality:
+        - critical
+        - high
+        - medium
+        - low
+      environment:
+        - prod
+        - pre
+      lifecycle_status:
+        - active
+        - retired
+    agent_cmdb.ci_relationships:
+      relationship_type:
+        - depends_on
+        - deployed_on
+        - uses_database
+      target_ci_type:
+        - application
+        - database
+        - server
+        - service
+      target_status:
+        - active
+        - degraded
+        - inactive
   sql_rules:
     - Genera una unica sentencia SELECT o WITH ... SELECT para PostgreSQL.
     - Usa exclusivamente relaciones y columnas autorizadas.
