@@ -709,6 +709,15 @@ Recommended production controls:
   payload, and close any returned `Mcp-Session-Id`;
 - CI checks for configuration drift and placeholder parameters.
 
+For the stateless database Runtime, Gateway MCP sessions are not required. The
+GatewayTarget propagates `Mcp-Session-Id` to AgentCore Runtime so callers can
+reuse a stable session identifier and preserve microVM affinity across related
+tool calls. This identifier is an affinity and isolation hint, not an
+authorization primitive; authorization continues to rely on the Gateway JWT
+authorizer and the signed `x-data-agent-*` headers. If Gateway MCP sessions are
+enabled for another target, that target must not propagate `Mcp-Session-Id`
+because AgentCore Gateway owns the downstream target session mapping.
+
 ## Design Decisions
 
 Current accepted decisions:

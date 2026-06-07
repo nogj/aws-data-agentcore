@@ -1,13 +1,11 @@
 import os
 import json
-from typing import Any
-
 from langchain_aws import ChatBedrockConverse
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from app.config import AppConfig, PromptTemplateConfig, load_secret
-from app.capabilities.database.models import SqlCandidate, SummaryCandidate
+from app.capabilities.database.models import SqlCandidate
 
 
 def _chat_model(config: AppConfig):
@@ -60,26 +58,5 @@ async def generate_sql(
             "question": question,
             "context": context or {},
             "max_rows": max_rows,
-        }
-    )
-
-
-async def summarize_results(
-    config: AppConfig,
-    question: str,
-    rows: list[dict[str, Any]],
-    assumptions: list[str],
-    truncated: bool,
-) -> SummaryCandidate:
-    """Summarize bounded results in the same language used by the question."""
-
-    prompt = _prompt(config.prompts.result_summary)
-    chain = prompt | _chat_model(config).with_structured_output(SummaryCandidate)
-    return await chain.ainvoke(
-        {
-            "question": question,
-            "assumptions": assumptions,
-            "rows": rows,
-            "truncated": truncated,
         }
     )

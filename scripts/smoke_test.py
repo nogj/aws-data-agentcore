@@ -54,6 +54,16 @@ def _headers(token: str, session_id: str | None = None) -> dict[str, str]:
     return headers
 
 
+def _header(headers: dict[str, str], name: str) -> str | None:
+    """Return a response header using case-insensitive lookup."""
+
+    wanted = name.lower()
+    for key, value in headers.items():
+        if key.lower() == wanted:
+            return value
+    return None
+
+
 def _post(
     gateway_url: str,
     token: str,
@@ -171,7 +181,7 @@ def main() -> None:
             },
         )
         _assert_no_error(initialized.payload)
-        session_id = initialized.headers.get("Mcp-Session-Id")
+        session_id = _header(initialized.headers, "Mcp-Session-Id")
 
         _notify(
             args.gateway_url,

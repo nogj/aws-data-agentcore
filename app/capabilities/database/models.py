@@ -30,6 +30,7 @@ class AskDatabaseResponse(BaseModel):
 
     status: Literal["ok", "rejected", "error"]
     answer: str
+    data: dict[str, Any] | None = None
     sql: str | None = None
     relations_used: list[str] = Field(default_factory=list)
     row_count: int = 0
@@ -45,14 +46,6 @@ class SqlCandidate(BaseModel):
 
     sql: str
     assumptions: list[str] = Field(default_factory=list)
-
-
-class SummaryCandidate(BaseModel):
-    """Structured natural-language answer produced from bounded query results."""
-
-    answer: str
-    confidence: Literal["high", "medium", "low"] = "medium"
-    warnings: list[str] = Field(default_factory=list)
 
 
 class QueryResult(BaseModel):

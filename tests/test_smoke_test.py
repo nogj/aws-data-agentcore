@@ -1,7 +1,7 @@
 import json
 
 from scripts.agent_cli import _format_tool_result
-from scripts.smoke_test import _contains_ok_status, _find_tool_name, _read_response
+from scripts.smoke_test import _contains_ok_status, _find_tool_name, _header, _read_response
 
 
 class FakeResponse:
@@ -33,6 +33,10 @@ def test_finds_prefixed_gateway_tool_name() -> None:
     payload = {"result": {"tools": [{"name": "data-agent___ask_database"}]}}
 
     assert _find_tool_name(payload) == "data-agent___ask_database"
+
+
+def test_reads_session_header_case_insensitively() -> None:
+    assert _header({"mcp-session-id": "abc"}, "Mcp-Session-Id") == "abc"
 
 
 def test_detects_nested_tool_status() -> None:

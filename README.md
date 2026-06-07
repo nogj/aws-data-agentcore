@@ -157,8 +157,11 @@ export BEARER_TOKEN="$(az account get-access-token \
 ./scripts/agent_cli.sh prod
 ```
 
-The CLI opens one MCP session, reuses it for questions, and closes it on exit.
-Use `:help` inside the prompt to list local commands.
+The CLI keeps a stable `Mcp-Session-Id` for the interactive process. If the
+Gateway does not return a session header, the CLI generates one locally and
+reuses it for all questions so AgentCore Runtime can route those calls to the
+same microVM while the Runtime session remains alive. Use `:help` inside the
+prompt to list local commands.
 
 ## Multiple Database Agents
 
@@ -182,8 +185,9 @@ DATA_AGENT_INSTANCE=cmdb CONFIG_FILE=config/cmdb-agent.yaml ./scripts/smoke_test
 prefix, per-instance Runtime IAM role name, and smoke-test target selection.
 Override `TARGET_NAME` only if the Gateway target name should differ from the
 instance name. `deploy.sh` always lets `infrastructure/runtime.yaml` create the
-per-instance Runtime IAM role. `smoke_test.sh` initializes and closes an MCP
-session so validation runs do not leave Gateway/Runtime sessions open.
+per-instance Runtime IAM role. `smoke_test.sh` initializes and closes any MCP
+session returned by the Gateway. Interactive clients should reuse a stable
+`Mcp-Session-Id` across questions to preserve Runtime microVM affinity.
 
 Prompts are also per instance. Each Runtime receives its own `CONFIG_KEY`, so
 the `prompts.sql_generation` and `prompts.result_summary` sections in
@@ -449,6 +453,14 @@ Identity/outbound authorization. It keeps OBO credential-provider configuration
 out of the database target contract. When a target needs more than one OAuth
 scope, provide `OAuthScopes` as a comma-separated CloudFormation parameter
 because the template uses a `CommaDelimitedList`.
+
+This database agent keeps the MCP server stateless and does not require Gateway
+MCP sessions. The GatewayTarget deliberately propagates `Mcp-Session-Id` along
+with the signed authorization context headers so clients can provide a stable
+session identifier and AgentCore Runtime can reuse the same microVM. If Gateway
+MCP sessions are enabled for a different target, remove `Mcp-Session-Id` from
+that target's metadata because AgentCore Gateway then manages target sessions
+internally.
 
 Important implementation note: AgentCore Gateway documentation describes
 `TOKEN_EXCHANGE` for OBO targets, while CloudFormation reference material may

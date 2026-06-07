@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import uuid
 from typing import Any
 
 try:
@@ -10,6 +11,7 @@ try:
         _assert_no_error,
         _delete_session,
         _find_tool_name,
+        _header,
         _notify,
         _post,
     )
@@ -19,6 +21,7 @@ except ModuleNotFoundError:
         _assert_no_error,
         _delete_session,
         _find_tool_name,
+        _header,
         _notify,
         _post,
     )
@@ -86,6 +89,7 @@ class AgentCli:
         self.session_id: str | None = None
         self.tool_name: str | None = None
         self.raw = False
+        self.include_sql = False
         self.max_rows = int(os.environ.get("AGENT_CLI_MAX_ROWS", "10"))
         self.request_id = 1
 
@@ -105,7 +109,9 @@ class AgentCli:
             },
         )
         _assert_no_error(initialized.payload)
-        self.session_id = initialized.headers.get("Mcp-Session-Id")
+        self.session_id = _header(initialized.headers, "Mcp-Session-Id")
+        if self.session_id is None:
+            self.session_id = f"data-agent-cli-{uuid.uuid4()}"
 
         _notify(
             self.gateway_url,
@@ -120,6 +126,10 @@ class AgentCli:
 
         listed = self.call_method("tools/list", {})
         self.tool_name = _find_tool_name(listed, self.target_name)
+        if self.session_id:
+            print(f"Session: {self.session_id}")
+        else:
+            print("Session: none")
 
     def close(self) -> None:
         _delete_session(self.gateway_url, self.token, self.session_id)
@@ -147,7 +157,11 @@ class AgentCli:
             "tools/call",
             {
                 "name": self.tool_name,
-                "arguments": {"question": question, "max_rows": self.max_rows},
+                "arguments": {
+                    "question": question,
+                    "max_rows": self.max_rows,
+                    "include_sql": self.include_sql,
+                },
             },
         )
 
@@ -159,6 +173,7 @@ class AgentCli:
                     "  :help          Show this help",
                     "  :tools         Print selected MCP tool name",
                     "  :max-rows N    Set query row limit for subsequent questions",
+                    "  :sql           Toggle generated SQL in subsequent answers",
                     "  :raw           Toggle raw JSON output",
                     "  :quit          Close the MCP session and exit",
                 ]
@@ -177,6 +192,9 @@ class AgentCli:
         elif name == ":raw":
             self.raw = not self.raw
             print(f"raw={str(self.raw).lower()}")
+        elif name == ":sql":
+            self.include_sql = not self.include_sql
+            print(f"include_sql={str(self.include_sql).lower()}")
         elif name == ":max-rows":
             if len(parts) != 2 or not parts[1].isdigit() or int(parts[1]) < 1:
                 print("Usage: :max-rows N")
