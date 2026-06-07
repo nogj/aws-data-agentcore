@@ -12,6 +12,7 @@ def _boot_log(message: str) -> None:
 _boot_log("main.py start")
 
 import asyncio
+import json
 import logging
 import os
 import uuid
@@ -40,7 +41,7 @@ from app.capabilities.database.database import execute_read_only_sql
 
 _boot_log("imported database execution")
 _boot_log("importing llm helpers")
-from app.capabilities.database.llm import generate_sql, summarize_results
+from app.capabilities.database.llm import generate_sql
 
 _boot_log("imported llm helpers")
 _boot_log("importing database models")
@@ -119,13 +120,42 @@ def _trusted_gateway_context(
     return set(claim_values(grants)), identity_from_header(identity)
 
 
-def _summary_input(
+def _response_rows(
     rows: list[dict[str, Any]], source_row_count: int, config: AppConfig
 ) -> tuple[list[dict[str, Any]], bool]:
-    """Return the rows visible to the summarizer and whether anything was omitted."""
+    """Return the rows visible in the response and whether anything was omitted."""
 
-    summary_rows = rows[: config.output.max_summary_rows]
-    return summary_rows, source_row_count > len(summary_rows)
+    response_rows = rows[: config.output.max_summary_rows]
+    return response_rows, source_row_count > len(response_rows)
+
+
+def _json_payload(
+    rows: list[dict[str, Any]],
+    row_count: int,
+    truncated: bool,
+    assumptions: list[str],
+) -> dict[str, Any]:
+    """Build deterministic query output without an LLM summarization pass."""
+
+    return {
+        "rows": rows,
+        "row_count": row_count,
+        "truncated": truncated,
+        "assumptions": assumptions,
+    }
+
+
+def _json_answer(
+    payload: dict[str, Any],
+) -> str:
+    """Serialize query output deterministically for legacy answer consumers."""
+
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
 
 
 @mcp.tool(
@@ -210,18 +240,21 @@ async def ask_database(
             rows = await timed_phase(
                 "result_normalization_ms", lambda: normalize_rows(result.rows, config)
             )
-            summary_rows, summary_truncated = await timed_phase(
-                "summary_input_ms", lambda: _summary_input(rows, len(result.rows), config)
+            response_rows, response_truncated = await timed_phase(
+                "response_rows_ms", lambda: _response_rows(rows, len(result.rows), config)
             )
-            summary = await timed_phase(
-                "result_summary_ms",
-                summarize_results(
-                    config,
-                    request.question,
-                    summary_rows,
+            data = await timed_phase(
+                "json_payload_ms",
+                lambda: _json_payload(
+                    response_rows,
+                    len(rows),
+                    response_truncated,
                     candidate.assumptions,
-                    truncated=summary_truncated,
                 ),
+            )
+            answer = await timed_phase(
+                "json_response_ms",
+                lambda: _json_answer(data),
             )
         can_show_sql = request.include_sql and (
             config.query.allow_sql_by_default
@@ -230,7 +263,7 @@ async def ask_database(
                 capability.sql_viewer_grant or config.authorization.sql_viewer_scope,
             )
         )
-        warnings = [*candidate.assumptions, *summary.warnings]
+        warnings = [*candidate.assumptions]
         emit(
             "ask_database_completed",
             trace_id=trace_id,
@@ -245,12 +278,13 @@ async def ask_database(
         )
         return response(
             status="ok",
-            answer=summary.answer,
+            answer=answer,
+            data=data,
             sql=validated.sql if can_show_sql else None,
             relations_used=validated.relations_used,
             row_count=len(rows),
             warnings=warnings,
-            confidence=summary.confidence,
+            confidence="high",
         )
     except PermissionError as exc:
         emit("ask_database_rejected", trace_id=trace_id, reason=type(exc).__name__)
