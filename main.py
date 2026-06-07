@@ -1,76 +1,36 @@
-import sys
-import time
-
-_BOOT_STARTED = time.perf_counter()
-
-
-def _boot_log(message: str) -> None:
-    elapsed_ms = int((time.perf_counter() - _BOOT_STARTED) * 1000)
-    print(f"BOOT {elapsed_ms}ms {message}", file=sys.stderr, flush=True)
-
-
-_boot_log("main.py start")
-
 import asyncio
 import logging
 import os
+import time
 import uuid
 from datetime import date, datetime, time as datetime_time
 from decimal import Decimal
 from typing import Any
 
-_boot_log("stdlib imports complete")
-_boot_log("importing mcp.server.fastmcp")
 from mcp.server.fastmcp import Context, FastMCP
 
-_boot_log("imported mcp.server.fastmcp")
-_boot_log("importing app.authorization")
 from app.authorization import (
     CallerIdentity,
     claim_values,
     identity_from_header,
     verify_gateway_header_signature,
 )
-
-_boot_log("imported app.authorization")
-_boot_log("importing app.audit")
 from app.audit import emit
-
-_boot_log("imported app.audit")
-_boot_log("importing database execution")
 from app.capabilities.database.database import execute_read_only_sql
-
-_boot_log("imported database execution")
-_boot_log("importing llm helpers")
 from app.capabilities.database.llm import generate_sql
-
-_boot_log("imported llm helpers")
-_boot_log("importing database models")
 from app.capabilities.database.models import AskDatabaseRequest, AskDatabaseResponse
-
-_boot_log("imported database models")
-_boot_log("importing database security")
 from app.capabilities.database.security import (
     has_scope,
     normalize_rows,
     validate_context,
     validate_question,
 )
-
-_boot_log("imported database security")
-_boot_log("importing sql validator")
 from app.capabilities.database.sql_validator import validate_sql
-
-_boot_log("imported sql validator")
-_boot_log("importing config helpers")
 from app.config import AppConfig, load_config, load_secret
 
-_boot_log("imported config helpers")
 
 logging.basicConfig(level=logging.INFO)
-_boot_log("logging configured")
 # AgentCore Runtime expects an MCP server listening on 0.0.0.0:8000/mcp.
-_boot_log("creating FastMCP server")
 mcp = FastMCP(
     "read-only-data-agent",
     host="0.0.0.0",
@@ -78,7 +38,6 @@ mcp = FastMCP(
     streamable_http_path="/mcp",
     stateless_http=True,
 )
-_boot_log("created FastMCP server")
 
 
 def _gateway_header_secret() -> str:
@@ -312,5 +271,4 @@ async def ask_database(
 
 
 if __name__ == "__main__":
-    _boot_log("starting FastMCP run")
     mcp.run(transport="streamable-http")

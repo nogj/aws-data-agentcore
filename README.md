@@ -88,6 +88,11 @@ same environment and VPC, reuses it when found, and otherwise creates one. Set
 `create_private_service_endpoints=false` only when equivalent endpoints and S3
 route table associations are managed outside the product.
 
+The committed configuration and parameter files are deployment templates. Before
+production, replace demo placeholders, review IAM and VPC endpoint policy scope
+against the target account, and document any wildcard permissions that are
+required by the AWS service contract.
+
 ## Prerequisites
 
 - AWS CLI authenticated with permissions for CloudFormation, S3, IAM, Secrets
@@ -128,6 +133,13 @@ export CONFIG_KEY=config/prod/data-agent-REPLACE.yaml
 `publish.sh` prints the exact `ARTIFACT_KEY` and `CONFIG_KEY` values to export
 before `deploy.sh`. The committed parameter file is a template and is not
 expected to deploy unchanged.
+
+For local validation before publishing, run:
+
+```bash
+make lint
+make test
+```
 
 ## Database Runtime Instance Example
 

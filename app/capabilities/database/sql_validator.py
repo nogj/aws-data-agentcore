@@ -43,6 +43,17 @@ FORBIDDEN_EXPRESSIONS = (
 )
 
 
+def _projected_columns(select: exp.Select) -> set[str]:
+    """Return the public column names projected by a query-local relation."""
+
+    columns: set[str] = set()
+    for projection in select.expressions:
+        name = projection.alias_or_name
+        if name:
+            columns.add(name.lower())
+    return columns
+
+
 def validate_sql(candidate: str, config: AppConfig, max_rows: int) -> ValidatedSql:
     """Parse, authorize, and bound a read-only query for the configured dialect."""
 
@@ -74,21 +85,35 @@ def validate_sql(candidate: str, config: AppConfig, max_rows: int) -> ValidatedS
     }
     denied_columns = {column.lower() for column in config.data_model.denied_columns}
 
-    # CTE aliases are query-local names and should not be confused with physical tables.
-    cte_aliases = {cte.alias_or_name.lower() for cte in statement.find_all(exp.CTE)}
+    # Query-local names should not be confused with physical tables.
+    query_local_columns: dict[str, set[str]] = {}
+    derived_aliases: set[str] = set()
+    for cte in statement.find_all(exp.CTE):
+        if isinstance(cte.this, exp.Select):
+            query_local_columns[cte.alias_or_name.lower()] = _projected_columns(cte.this)
+    for subquery in statement.find_all(exp.Subquery):
+        alias = subquery.alias_or_name
+        if alias and isinstance(subquery.this, exp.Select):
+            normalized_alias = alias.lower()
+            query_local_columns[normalized_alias] = _projected_columns(subquery.this)
+            derived_aliases.add(normalized_alias)
+
     relations_used: list[str] = []
     relation_by_qualifier: dict[str, str] = {}
+    referenced_query_local_names: set[str] = set()
     for table in statement.find_all(exp.Table):
         if table.catalog:
             raise SqlValidationError(f"catalog_not_allowed:{table.catalog.lower()}")
         relation_name = ".".join(part for part in [table.db, table.name] if part).lower()
-        if not table.db and relation_name in cte_aliases:
+        if not table.db and relation_name in query_local_columns:
+            referenced_query_local_names.add(relation_name)
             continue
         if relation_name not in allowed_relations:
             raise SqlValidationError(f"relation_not_allowed:{relation_name}")
         relations_used.append(relation_name)
         relation_by_qualifier[table.alias_or_name.lower()] = relation_name
         relation_by_qualifier[table.name.lower()] = relation_name
+    referenced_query_local_names.update(derived_aliases)
 
     if not relations_used:
         raise SqlValidationError("authorized_relation_required")
@@ -100,14 +125,20 @@ def validate_sql(candidate: str, config: AppConfig, max_rows: int) -> ValidatedS
         qualifier = column.table.lower()
         if qualifier:
             relation_name = relation_by_qualifier.get(qualifier)
-            # Columns selected from a CTE were already authorized in its definition.
-            if relation_name is None and qualifier in cte_aliases:
+            if relation_name is None and qualifier in query_local_columns:
+                if name not in query_local_columns[qualifier]:
+                    raise SqlValidationError(f"column_not_allowed:{qualifier}.{name}")
                 continue
             if relation_name is None or name not in allowed_relations[relation_name]:
                 raise SqlValidationError(f"column_not_allowed:{qualifier}.{name}")
             continue
 
         physical_relations = sorted(set(relations_used))
+        if any(
+            name in query_local_columns[local_name]
+            for local_name in referenced_query_local_names
+        ):
+            continue
         if not all(name in allowed_relations[relation] for relation in physical_relations):
             raise SqlValidationError(f"column_not_allowed:{name}")
 

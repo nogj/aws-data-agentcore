@@ -142,6 +142,8 @@ The generated SQL is parsed and validated with SQLGlot. The validator enforces:
 - no `SELECT *`
 - authorized relations only
 - authorized columns per relation
+- projected CTE and derived-table columns, including aggregate aliases, may be
+  selected after their source query has been validated
 - denied columns rejected
 - allowed functions only
 - literal integer `LIMIT` when present
@@ -149,6 +151,12 @@ The generated SQL is parsed and validated with SQLGlot. The validator enforces:
 
 SQLGlot is a deterministic gate before execution. Database permissions remain
 the final enforcement layer.
+
+If a safe-looking question is rejected, inspect the returned rejection reason
+and the generated SQL in an authorized SQL-viewer workflow. Common causes are
+unconfigured SQL functions, `SELECT *`, non-literal limits, relations or columns
+missing from `data_model.allowed_relations`, or SQL constructs intentionally not
+supported by the validator.
 
 ## PostgreSQL Preparation
 

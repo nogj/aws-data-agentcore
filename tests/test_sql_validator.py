@@ -69,6 +69,62 @@ def test_accepts_cte_over_authorized_relation() -> None:
     assert result.relations_used == [relation]
 
 
+def test_accepts_cte_projected_aggregate_alias() -> None:
+    relation = relation_name()
+    first_column, _ = relation_columns()
+    result = validate_sql(
+        f"WITH totals AS (SELECT COUNT({first_column}) AS total FROM {relation}) "
+        "SELECT total FROM totals",
+        config(),
+        max_rows=10,
+    )
+    assert result.relations_used == [relation]
+
+
+def test_rejects_unknown_qualified_cte_column() -> None:
+    relation = relation_name()
+    first_column, _ = relation_columns()
+    try:
+        validate_sql(
+            f"WITH filtered AS (SELECT {first_column} FROM {relation}) "
+            "SELECT filtered.not_projected FROM filtered",
+            config(),
+            max_rows=10,
+        )
+    except SqlValidationError as exc:
+        assert "column_not_allowed:filtered.not_projected" in str(exc)
+        return
+    raise AssertionError("Expected SqlValidationError")
+
+
+def test_rejects_unreferenced_cte_projected_alias() -> None:
+    relation = relation_name()
+    first_column, _ = relation_columns()
+    try:
+        validate_sql(
+            f"WITH totals AS (SELECT COUNT({first_column}) AS total FROM {relation}) "
+            f"SELECT total FROM {relation}",
+            config(),
+            max_rows=10,
+        )
+    except SqlValidationError as exc:
+        assert "column_not_allowed:total" in str(exc)
+        return
+    raise AssertionError("Expected SqlValidationError")
+
+
+def test_accepts_derived_table_projected_alias() -> None:
+    relation = relation_name()
+    first_column, _ = relation_columns()
+    result = validate_sql(
+        f"SELECT total FROM (SELECT COUNT({first_column}) AS total FROM {relation}) "
+        "AS derived",
+        config(),
+        max_rows=10,
+    )
+    assert result.relations_used == [relation]
+
+
 def test_rejects_write_inside_cte() -> None:
     relation = relation_name()
     first_column, _ = relation_columns()
