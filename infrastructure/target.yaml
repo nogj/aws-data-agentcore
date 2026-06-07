@@ -14,7 +14,10 @@ Parameters:
     Type: String
   AllowedRequestHeaders:
     Type: CommaDelimitedList
-    Default: "x-data-agent-grants,x-data-agent-identity,x-data-agent-issued-at,x-data-agent-signature"
+    Default: "Mcp-Session-Id,x-data-agent-grants,x-data-agent-identity,x-data-agent-issued-at,x-data-agent-signature"
+  AllowedResponseHeaders:
+    Type: CommaDelimitedList
+    Default: "Mcp-Session-Id"
 
 Resources:
   GatewayTarget:
@@ -25,6 +28,7 @@ Resources:
       Description: !Ref TargetDescription
       MetadataConfiguration:
         AllowedRequestHeaders: !Ref AllowedRequestHeaders
+        AllowedResponseHeaders: !Ref AllowedResponseHeaders
       TargetConfiguration:
         Mcp:
           McpServer:

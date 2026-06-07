@@ -38,6 +38,7 @@ def _placeholder_keys(parameters: dict[str, Any], instance: str) -> list[str]:
         "oauth_provider_arn",
         "oauth_scopes",
         "allowed_request_headers",
+        "allowed_response_headers",
         "private_subnet_ids",
         "runtime_security_group_ids",
         "idle_runtime_session_timeout",
@@ -111,7 +112,7 @@ def _validate_target_credential_config(parameters: dict[str, Any]) -> None:
 
 
 def _validate_allowed_request_headers(parameters: dict[str, Any]) -> None:
-    """Ensure the GatewayTarget forwards every signed header the Runtime requires."""
+    """Ensure the GatewayTarget forwards MCP affinity and signed auth headers."""
 
     configured = parameters.get("allowed_request_headers")
     if not configured:
@@ -122,6 +123,7 @@ def _validate_allowed_request_headers(parameters: dict[str, Any]) -> None:
         if header.strip()
     }
     required = {
+        "mcp-session-id",
         "x-data-agent-grants",
         "x-data-agent-identity",
         "x-data-agent-issued-at",
@@ -133,6 +135,19 @@ def _validate_allowed_request_headers(parameters: dict[str, Any]) -> None:
             "allowed_request_headers must include signed Gateway headers: "
             + ", ".join(missing)
         )
+
+
+def _validate_allowed_response_headers(parameters: dict[str, Any]) -> None:
+    configured = parameters.get("allowed_response_headers")
+    if not configured:
+        return
+    headers = {
+        header.strip().lower()
+        for header in str(configured).split(",")
+        if header.strip()
+    }
+    if "mcp-session-id" not in headers:
+        raise SystemExit("allowed_response_headers must include Mcp-Session-Id")
 
 
 def _validate_runtime_lifecycle(parameters: dict[str, Any]) -> None:
@@ -164,6 +179,7 @@ def main() -> None:
         )
     _validate_target_credential_config(parameters)
     _validate_allowed_request_headers(parameters)
+    _validate_allowed_response_headers(parameters)
     _validate_runtime_lifecycle(parameters)
 
     required_scope = parameters.get("required_scope")

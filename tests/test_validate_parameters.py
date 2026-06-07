@@ -2,6 +2,7 @@ from scripts.validate_parameters import (
     _contains_placeholder,
     _deployment_parameters,
     _placeholder_keys,
+    _validate_allowed_response_headers,
     _validate_allowed_request_headers,
     _validate_authorization_config,
     _validate_runtime_lifecycle,
@@ -82,7 +83,11 @@ def test_accepts_gateway_iam_target_config() -> None:
 def test_rejects_allowed_headers_without_signature_headers() -> None:
     try:
         _validate_allowed_request_headers(
-            {"allowed_request_headers": "x-data-agent-grants,x-data-agent-identity"}
+            {
+                "allowed_request_headers": (
+                    "Mcp-Session-Id,x-data-agent-grants,x-data-agent-identity"
+                )
+            }
         )
     except SystemExit as exc:
         assert "x-data-agent-signature" in str(exc)
@@ -94,16 +99,48 @@ def test_accepts_allowed_headers_with_signature_headers() -> None:
     _validate_allowed_request_headers(
         {
             "allowed_request_headers": (
-                "x-data-agent-grants,x-data-agent-identity,"
+                "Mcp-Session-Id,x-data-agent-grants,x-data-agent-identity,"
                 "x-data-agent-issued-at,x-data-agent-signature"
             )
         }
     )
 
 
+def test_rejects_allowed_headers_without_mcp_session_id() -> None:
+    try:
+        _validate_allowed_request_headers(
+            {
+                "allowed_request_headers": (
+                    "x-data-agent-grants,x-data-agent-identity,"
+                    "x-data-agent-issued-at,x-data-agent-signature"
+                )
+            }
+        )
+    except SystemExit as exc:
+        assert "mcp-session-id" in str(exc).lower()
+        return
+    raise AssertionError("Expected SystemExit")
+
+
+def test_rejects_allowed_response_headers_without_mcp_session_id() -> None:
+    try:
+        _validate_allowed_response_headers({"allowed_response_headers": "content-type"})
+    except SystemExit as exc:
+        assert "Mcp-Session-Id" in str(exc)
+        return
+    raise AssertionError("Expected SystemExit")
+
+
+def test_accepts_allowed_response_headers_with_mcp_session_id() -> None:
+    _validate_allowed_response_headers({"allowed_response_headers": "Mcp-Session-Id"})
+
+
 def test_accepts_short_validation_lifecycle() -> None:
     _validate_runtime_lifecycle(
-        {"idle_runtime_session_timeout": 60, "max_lifetime": 900}
+        {
+            "idle_runtime_session_timeout": 60,
+            "max_lifetime": 900,
+        }
     )
 
 

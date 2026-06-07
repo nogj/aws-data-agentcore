@@ -502,7 +502,10 @@ supporting controls include:
 
 - private database routing;
 - VPC endpoints for S3, Secrets Manager, Bedrock Runtime, and CloudWatch Logs
-  where possible;
+  where possible. For private Runtime subnets without NAT, the S3 gateway
+  endpoint must be associated with the effective route table used by those
+  subnets because AgentCore fetches the Runtime ZIP and configuration from S3
+  before user Python code starts;
 - NAT only when an approved external provider is required;
 - database connection limits for the technical role;
 - read replica usage for analytical traffic;

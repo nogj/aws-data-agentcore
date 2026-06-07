@@ -35,7 +35,10 @@ detailed security architecture.
 - Python 3.13 and `zip`.
 - A private VPC route to the target database.
 - NAT or equivalent outbound connectivity when using OpenAI.
-- VPC endpoints for S3, Secrets Manager, and Bedrock are recommended.
+- VPC endpoints for S3, Secrets Manager, and Bedrock are recommended. For
+  private Runtime subnets without NAT, the S3 gateway endpoint must be
+  associated with the effective route table used by those subnets so AgentCore
+  can fetch the deployed ZIP and configuration before Python starts.
 - An OIDC/JWT provider for authenticating Gateway consumers.
 - Database-specific authorized views and a read-only technical role.
 
@@ -136,7 +139,8 @@ AgentCore Runtime ZIP. Run it in CI and retain the checksum generated in
 security groups exist and belong to one VPC, the database secret exists, and
 the Bedrock inference profile can be resolved from the configured Region. A
 successful Runtime deployment and smoke test are still required to prove
-AgentCore AZ support, service endpoint access, and database connectivity.
+AgentCore AZ support, service endpoint access, S3 artifact/config access, and
+database connectivity.
 
 `smoke_test.sh` performs both MCP discovery and an actual `tools/call` to
 `ask_database`. Override the safe question with `SMOKE_QUESTION` and the row

@@ -12,6 +12,7 @@ TARGET_NAME="${TARGET_NAME:-${DATA_AGENT_INSTANCE}}"
 TARGET_DESCRIPTION="${TARGET_DESCRIPTION:-Public MCP target for ${TARGET_NAME}.}"
 ARTIFACT_KEY="${ARTIFACT_KEY:?Set ARTIFACT_KEY from publish.sh output}"
 CONFIG_KEY="${CONFIG_KEY:?Set CONFIG_KEY from publish.sh output}"
+SKIP_TARGET_DEPLOY="${SKIP_TARGET_DEPLOY:-false}"
 
 python3 "${ROOT}/scripts/validate_parameters.py" "${PARAMS}" "${ENVIRONMENT}" "${CONFIG_FILE}" "${DATA_AGENT_INSTANCE}"
 
@@ -34,7 +35,9 @@ read_optional_agent_param() {
 REGION="$(read_param region)"
 BUCKET="$(read_param artifact_bucket_name)"
 ALLOWED_REQUEST_HEADERS="${ALLOWED_REQUEST_HEADERS:-$(read_optional_agent_param allowed_request_headers)}"
-ALLOWED_REQUEST_HEADERS="${ALLOWED_REQUEST_HEADERS:-x-data-agent-grants,x-data-agent-identity}"
+ALLOWED_REQUEST_HEADERS="${ALLOWED_REQUEST_HEADERS:-Mcp-Session-Id,x-data-agent-grants,x-data-agent-identity,x-data-agent-issued-at,x-data-agent-signature}"
+ALLOWED_RESPONSE_HEADERS="${ALLOWED_RESPONSE_HEADERS:-$(read_optional_agent_param allowed_response_headers)}"
+ALLOWED_RESPONSE_HEADERS="${ALLOWED_RESPONSE_HEADERS:-Mcp-Session-Id}"
 IDLE_RUNTIME_SESSION_TIMEOUT="$(read_optional_agent_param idle_runtime_session_timeout)"
 IDLE_RUNTIME_SESSION_TIMEOUT="${IDLE_RUNTIME_SESSION_TIMEOUT:-300}"
 MAX_LIFETIME="$(read_optional_agent_param max_lifetime)"
@@ -93,6 +96,11 @@ RUNTIME_ID="$(aws cloudformation describe-stacks --region "${REGION}" --stack-na
 RUNTIME_ARN="$(aws bedrock-agentcore-control get-agent-runtime --region "${REGION}" --agent-runtime-id "${RUNTIME_ID}" --query agentRuntimeArn --output text)"
 RUNTIME_ENDPOINT_URL="$(python3 -c 'import sys,urllib.parse; print("https://bedrock-agentcore.{}.amazonaws.com/runtimes/{}/invocations?qualifier=DEFAULT".format(sys.argv[1], urllib.parse.quote(sys.argv[2], safe="")))' "${REGION}" "${RUNTIME_ARN}")"
 
+if [[ "${SKIP_TARGET_DEPLOY}" == "true" ]]; then
+  echo "Skipped target deployment for ${DATA_AGENT_INSTANCE}; runtime ${RUNTIME_ARN}"
+  exit 0
+fi
+
 aws cloudformation deploy \
   --region "${REGION}" \
   --stack-name "${TARGET_STACK}" \
@@ -102,6 +110,7 @@ aws cloudformation deploy \
     TargetName="${TARGET_NAME}" \
     TargetDescription="${TARGET_DESCRIPTION}" \
     RuntimeEndpointUrl="${RUNTIME_ENDPOINT_URL}" \
-    AllowedRequestHeaders="${ALLOWED_REQUEST_HEADERS}"
+    AllowedRequestHeaders="${ALLOWED_REQUEST_HEADERS}" \
+    AllowedResponseHeaders="${ALLOWED_RESPONSE_HEADERS}"
 
 echo "Deployed ${DATA_AGENT_INSTANCE} runtime ${RUNTIME_ARN}"

@@ -130,6 +130,7 @@ Resources:
       ProtocolConfiguration: MCP
       RequestHeaderConfiguration:
         RequestHeaderAllowlist:
+          - Mcp-Session-Id
           - x-data-agent-grants
           - x-data-agent-identity
           - x-data-agent-issued-at
