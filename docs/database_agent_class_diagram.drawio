@@ -1,0 +1,298 @@
+<mxfile host="app.diagrams.net" agent="Codex">
+  <diagram id="database-agent-class-diagram" name="Database Agent Class Diagram">
+    <mxGraphModel dx="1203" dy="665" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;align=left;verticalAlign=middle;" value="Read-only Database Agent - Class Diagram" vertex="1">
+          <mxGeometry height="40" width="760" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_contracts" parent="1" style="swimlane;html=1;rounded=0;startSize=28;fontStyle=1;fillColor=#f8f9fa;strokeColor=#666666;" value="Public Tool Contracts" vertex="1">
+          <mxGeometry height="520" width="380" x="40" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_runtime" parent="1" style="swimlane;html=1;rounded=0;startSize=28;fontStyle=1;fillColor=#f8f9fa;strokeColor=#666666;" value="Runtime Entry Point" vertex="1">
+          <mxGeometry height="520" width="500" x="460" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_auth" parent="1" style="swimlane;html=1;rounded=0;startSize=28;fontStyle=1;fillColor=#f8f9fa;strokeColor=#666666;" value="Gateway Trust Boundary" vertex="1">
+          <mxGeometry height="520" width="380" x="1000" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_config" parent="1" style="swimlane;html=1;rounded=0;startSize=28;fontStyle=1;fillColor=#f8f9fa;strokeColor=#666666;" value="Versioned Configuration Model" vertex="1">
+          <mxGeometry height="1040" width="720" x="1420" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="CapabilityConfig" parent="lane_config" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;CapabilityConfig&lt;/b&gt;&lt;hr&gt;+ name&lt;br&gt;+ target&lt;br&gt;+ identity_mode&lt;br&gt;+ required_grants&lt;br&gt;+ sql_viewer_grant" vertex="1">
+          <mxGeometry height="130" width="130" x="240" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="RelationConfig" parent="lane_config" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;RelationConfig&lt;/b&gt;&lt;hr&gt;+ name&lt;br&gt;+ description&lt;br&gt;+ columns" vertex="1">
+          <mxGeometry height="95" width="130" x="240" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_pipeline" parent="1" style="swimlane;html=1;rounded=0;startSize=28;fontStyle=1;fillColor=#f8f9fa;strokeColor=#666666;" value="Database Capability Pipeline" vertex="1">
+          <mxGeometry height="470" width="1340" x="40" y="660" as="geometry" />
+        </mxCell>
+        <mxCell id="ValidatedSql" parent="lane_pipeline" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;spacing=8;" value="&lt;b&gt;&amp;lt;&amp;lt;dataclass&amp;gt;&amp;gt;&lt;br&gt;ValidatedSql&lt;/b&gt;&lt;hr&gt;+ sql: str&lt;br&gt;+ relations_used: list[str]" vertex="1">
+          <mxGeometry height="95" width="230" x="570" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="AskDatabaseRequest" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;spacing=8;" value="&lt;b&gt;AskDatabaseRequest&lt;/b&gt;&lt;hr&gt;+ question: str&lt;br&gt;+ max_rows: int | None&lt;br&gt;+ include_sql: bool&lt;br&gt;+ context: dict[str, str] | None&lt;hr&gt;+ validate_context_shape()" vertex="1">
+          <mxGeometry height="180" width="290" x="80" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="SqlCandidate" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;spacing=8;" value="&lt;b&gt;SqlCandidate&lt;/b&gt;&lt;hr&gt;+ sql: str&lt;br&gt;+ assumptions: list[str]" vertex="1">
+          <mxGeometry height="90" width="290" x="80" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="QueryResult" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;spacing=8;" value="&lt;b&gt;QueryResult&lt;/b&gt;&lt;hr&gt;+ rows: list[dict[str, Any]]" vertex="1">
+          <mxGeometry height="80" width="290" x="80" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="AskDatabaseResponse" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;spacing=8;" value="&lt;b&gt;AskDatabaseResponse&lt;/b&gt;&lt;hr&gt;+ status: ok | rejected | error&lt;br&gt;+ data: dict | None&lt;br&gt;+ message: str | None&lt;br&gt;+ sql: str | None&lt;br&gt;+ relations_used: list[str]&lt;br&gt;+ row_count: int&lt;br&gt;+ warnings: list[str]&lt;br&gt;+ trace_id: str&lt;br&gt;+ elapsed_ms: int&lt;br&gt;+ rejection_reason: str | None" vertex="1">
+          <mxGeometry height="270" width="250" x="490" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="AskDatabaseTool" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacing=8;" value="&lt;b&gt;&amp;lt;&amp;lt;MCP tool&amp;gt;&amp;gt;&lt;br&gt;ask_database()&lt;/b&gt;&lt;hr&gt;+ question: str&lt;br&gt;+ ctx: Context&lt;br&gt;+ max_rows: int | None&lt;br&gt;+ include_sql: bool&lt;br&gt;+ context: dict | None&lt;hr&gt;+ validates request&lt;br&gt;+ authorizes Gateway context&lt;br&gt;+ generates and validates SQL&lt;br&gt;+ executes read-only query" vertex="1">
+          <mxGeometry height="270" width="170" x="760" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="ResponseBuilder" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacing=8;" value="&lt;b&gt;response()&lt;/b&gt;&lt;hr&gt;+ trace_id: str&lt;br&gt;+ elapsed_ms: int&lt;hr&gt;+ builds AskDatabaseResponse&lt;br&gt;+ excludes null fields" vertex="1">
+          <mxGeometry height="110" width="280" x="570" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="TrustedGatewayContext" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacing=8;" value="&lt;b&gt;_trusted_gateway_context()&lt;/b&gt;&lt;hr&gt;+ ctx: Context&lt;br&gt;+ signing_secret: str&lt;hr&gt;+ verifies signed x-data-agent-* headers&lt;br&gt;+ returns (grants, CallerIdentity)" vertex="1">
+          <mxGeometry height="145" width="310" x="1030" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="CallerIdentity" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacing=8;" value="&lt;b&gt;CallerIdentity&lt;/b&gt;&lt;hr&gt;+ claims: dict[str, str]&lt;hr&gt;+ subject: str | None&lt;br&gt;+ display_name: str | None&lt;br&gt;+ audit_fields(): dict[str, str]" vertex="1">
+          <mxGeometry height="155" width="310" x="1030" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="SecurityGuards" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;spacing=8;" value="&lt;b&gt;&amp;lt;&amp;lt;module&amp;gt;&amp;gt;&lt;br&gt;security.py&lt;/b&gt;&lt;hr&gt;+ validate_question()&lt;br&gt;+ validate_context()&lt;br&gt;+ normalize_rows()&lt;br&gt;+ has_scope()" vertex="1">
+          <mxGeometry height="150" width="220" x="80" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="SqlGenerator" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;spacing=8;" value="&lt;b&gt;&amp;lt;&amp;lt;module&amp;gt;&amp;gt;&lt;br&gt;llm.py&lt;/b&gt;&lt;hr&gt;+ generate_sql(): SqlCandidate&lt;br&gt;+ _chat_model()&lt;br&gt;+ _schema_context()&lt;br&gt;+ _prompt()" vertex="1">
+          <mxGeometry height="150" width="230" x="340" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="SqlValidator" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;spacing=8;" value="&lt;b&gt;&amp;lt;&amp;lt;module&amp;gt;&amp;gt;&lt;br&gt;sql_validator.py&lt;/b&gt;&lt;hr&gt;+ validate_sql(): ValidatedSql&lt;br&gt;+ _projected_columns()&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="230" x="610" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="DatabaseExecutor" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;spacing=8;" value="&lt;b&gt;&amp;lt;&amp;lt;module&amp;gt;&amp;gt;&lt;br&gt;database.py&lt;/b&gt;&lt;hr&gt;+ execute_read_only_sql(): QueryResult&lt;br&gt;+ _execute_sync()&lt;br&gt;+ _configure_postgresql()" vertex="1">
+          <mxGeometry height="150" width="260" x="900" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="AppConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;AppConfig&lt;/b&gt;&lt;hr&gt;+ version: str&lt;br&gt;+ agent: dict&lt;br&gt;+ llm: LlmConfig&lt;br&gt;+ prompts: PromptsConfig&lt;br&gt;+ messages: MessagesConfig&lt;br&gt;+ query: QueryConfig&lt;br&gt;+ database: DatabaseConfig&lt;br&gt;+ authorization: AuthorizationConfig&lt;br&gt;+ capabilities: list[CapabilityConfig]&lt;br&gt;+ data_model: DataModelConfig&lt;br&gt;+ output: OutputConfig&lt;br&gt;+ observability: ObservabilityConfig&lt;hr&gt;+ capability(name): CapabilityConfig" vertex="1">
+          <mxGeometry height="330" width="290" x="1460" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="LlmConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;LlmConfig&lt;/b&gt;&lt;hr&gt;+ provider&lt;br&gt;+ model&lt;br&gt;+ temperature&lt;br&gt;+ timeout_seconds&lt;br&gt;+ bedrock_model_id" vertex="1">
+          <mxGeometry height="130" width="150" x="1810" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="PromptsConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;PromptsConfig&lt;/b&gt;&lt;hr&gt;+ sql_generation" vertex="1">
+          <mxGeometry height="75" width="150" x="1810" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="PromptTemplateConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;PromptTemplateConfig&lt;/b&gt;&lt;hr&gt;+ system&lt;br&gt;+ user" vertex="1">
+          <mxGeometry height="75" width="130" x="1980" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="MessagesConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;MessagesConfig&lt;/b&gt;&lt;hr&gt;+ rejected&lt;br&gt;+ error" vertex="1">
+          <mxGeometry height="85" width="150" x="1810" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="QueryConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;QueryConfig&lt;/b&gt;&lt;hr&gt;+ row limits&lt;br&gt;+ timeout_seconds&lt;br&gt;+ question/context bounds" vertex="1">
+          <mxGeometry height="105" width="150" x="1810" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="DatabaseConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;DatabaseConfig&lt;/b&gt;&lt;hr&gt;+ dialect&lt;br&gt;+ sqlglot_dialect&lt;br&gt;+ secret_uri_key&lt;br&gt;+ connect_args&lt;br&gt;+ statement_timeout_ms" vertex="1">
+          <mxGeometry height="130" width="150" x="1810" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="AuthorizationConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;AuthorizationConfig&lt;/b&gt;&lt;hr&gt;+ mode&lt;br&gt;+ required_scope&lt;br&gt;+ sql_viewer_scope&lt;br&gt;+ accepted_claims&lt;br&gt;+ identity_claims" vertex="1">
+          <mxGeometry height="130" width="150" x="1460" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="VCXLn631tZsVZHnPVhLA-1" edge="1" parent="1" source="DataModelConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="RelationConfig" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DataModelConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;DataModelConfig&lt;/b&gt;&lt;hr&gt;+ allowed_relations&lt;br&gt;+ denied_columns&lt;br&gt;+ glossary/synonyms&lt;br&gt;+ sql_rules&lt;br&gt;+ allowed_functions" vertex="1">
+          <mxGeometry height="130" width="150" x="1460" y="700" as="geometry" />
+        </mxCell>
+        <mxCell id="VCXLn631tZsVZHnPVhLA-2" edge="1" parent="1" source="RelationConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="DataModelConfig" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="OutputConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;OutputConfig&lt;/b&gt;&lt;hr&gt;+ max_cell_length&lt;br&gt;+ max_summary_rows&lt;br&gt;+ redact_patterns" vertex="1">
+          <mxGeometry height="100" width="150" x="1810" y="780" as="geometry" />
+        </mxCell>
+        <mxCell id="ObservabilityConfig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacing=8;" value="&lt;b&gt;ObservabilityConfig&lt;/b&gt;&lt;hr&gt;+ log_level&lt;br&gt;+ log_question&lt;br&gt;+ log_sql" vertex="1">
+          <mxGeometry height="95" width="150" x="1810" y="910" as="geometry" />
+        </mxCell>
+        <mxCell id="e_request" edge="1" parent="1" source="AskDatabaseTool" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#666666;exitX=0.45;exitY=0.003;exitDx=0;exitDy=0;exitPerimeter=0;" target="AskDatabaseRequest" value="validates into">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="837" y="150" />
+              <mxPoint x="440" y="150" />
+              <mxPoint x="440" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_response" edge="1" parent="1" source="ResponseBuilder" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#666666;" target="AskDatabaseResponse" value="builds">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="710" y="460" />
+              <mxPoint x="615" y="460" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_auth" edge="1" parent="1" source="AskDatabaseTool" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#666666;" target="TrustedGatewayContext" value="authorizes via">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="980" y="260" />
+              <mxPoint x="980" y="223" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_identity" edge="1" parent="1" source="TrustedGatewayContext" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#d6b656;" target="CallerIdentity" value="returns">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1140" y="320" />
+              <mxPoint x="1140" y="320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_config" edge="1" parent="1" source="AskDatabaseTool" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#9673a6;" target="AppConfig" value="loads">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1440" y="310" />
+              <mxPoint x="1440" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_security" edge="1" parent="1" source="AskDatabaseTool" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#b85450;" target="SecurityGuards" value="uses">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="850" y="640" />
+              <mxPoint x="190" y="640" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_generate" edge="1" parent="1" source="AskDatabaseTool" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#b85450;" target="SqlGenerator" value="calls">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="850" y="650" />
+              <mxPoint x="455" y="650" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_candidate" edge="1" parent="1" source="SqlGenerator" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#82b366;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="SqlCandidate" value="produces">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="455" y="620" />
+              <mxPoint x="400" y="620" />
+              <mxPoint x="400" y="395" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_validate" edge="1" parent="1" source="AskDatabaseTool" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#b85450;" target="SqlValidator" value="validates candidate">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="850" y="640" />
+              <mxPoint x="725" y="640" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_validated" edge="1" parent="1" source="SqlValidator" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#b85450;" target="ValidatedSql" value="returns">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_execute" edge="1" parent="1" source="AskDatabaseTool" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#b85450;" target="DatabaseExecutor" value="executes">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="900" y="580" />
+              <mxPoint x="1060" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_result" edge="1" parent="1" source="DatabaseExecutor" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#82b366;" target="QueryResult" value="returns">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1030" y="630" />
+              <mxPoint x="225" y="630" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_response_builder" edge="1" parent="1" source="AskDatabaseTool" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#666666;" target="ResponseBuilder" value="builds response">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="845" y="460" />
+              <mxPoint x="710" y="460" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c_llm" edge="1" parent="1" source="AppConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="LlmConfig" value="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c_prompts" edge="1" parent="1" source="AppConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="PromptsConfig" value="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c_prompt_template" edge="1" parent="1" source="PromptsConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="PromptTemplateConfig" value="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c_messages" edge="1" parent="1" source="AppConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="MessagesConfig" value="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c_query" edge="1" parent="1" source="AppConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="QueryConfig" value="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c_database" edge="1" parent="1" source="AppConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="DatabaseConfig" value="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c_auth_config" edge="1" parent="1" source="AppConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="AuthorizationConfig" value="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1605" y="490" />
+              <mxPoint x="1545" y="490" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c_capability" edge="1" parent="1" source="AppConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="CapabilityConfig" value="0..*">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1605" y="490" />
+              <mxPoint x="1725" y="490" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c_data_model" edge="1" parent="1" source="AppConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.308;entryDx=0;entryDy=0;entryPerimeter=0;" target="DataModelConfig" value="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1605" y="490" />
+              <mxPoint x="1440" y="490" />
+              <mxPoint x="1440" y="740" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c_relation" edge="1" parent="1" source="DataModelConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="RelationConfig" value="1..*">
+          <mxGeometry relative="1" x="-0.3849" y="-15" as="geometry">
+            <mxPoint x="15" y="-15" as="offset" />
+            <Array as="points">
+              <mxPoint x="1650" y="765" />
+              <mxPoint x="1650" y="765" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c_output" edge="1" parent="1" source="AppConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="OutputConfig" value="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c_observability" edge="1" parent="1" source="AppConfig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=diamondThin;startFill=1;endArrow=open;strokeColor=#9673a6;" target="ObservabilityConfig" value="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d_llm_config" edge="1" parent="1" source="SqlGenerator" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;strokeColor=#9673a6;exitX=0.439;exitY=1.019;exitDx=0;exitDy=0;exitPerimeter=0;" target="AppConfig" value="reads config">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="441" y="1070" />
+              <mxPoint x="1410" y="1070" />
+              <mxPoint x="1410" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="d_validator_config" edge="1" parent="1" source="SqlValidator" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;strokeColor=#9673a6;" target="DataModelConfig" value="reads allowlists">
+          <mxGeometry relative="1" x="0.3871" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1000" y="765" />
+              <mxPoint x="1000" y="765" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="d_database_config" edge="1" parent="1" source="DatabaseExecutor" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;strokeColor=#9673a6;" target="DatabaseConfig" value="uses DB settings">
+          <mxGeometry relative="1" x="-0.634" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1390" y="795" />
+              <mxPoint x="1390" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
