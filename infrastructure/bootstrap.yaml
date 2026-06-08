@@ -229,6 +229,33 @@ Resources:
               return base64.urlsafe_b64encode(digest).decode().rstrip("=")
 
 
+          def _affinity_session_id(secret, claims):
+              identity_claims = [
+                  claim.strip()
+                  for claim in os.environ["IDENTITY_CLAIMS"].split(",")
+                  if claim.strip()
+              ]
+              selected = {
+                  claim: claims[claim]
+                  for claim in identity_claims
+                  if isinstance(claims.get(claim), str) and claims.get(claim)
+              }
+              if not selected:
+                  selected = {
+                      claim: claims[claim]
+                      for claim in ("iss", "sub", "oid", "client_id", "appid", "azp")
+                      if isinstance(claims.get(claim), str) and claims.get(claim)
+                  }
+              material = {
+                  "identity": selected,
+                  "required_scope": os.environ["REQUIRED_SCOPE"],
+                  "function": os.environ.get("AWS_LAMBDA_FUNCTION_NAME", ""),
+              }
+              payload = json.dumps(material, separators=(",", ":"), sort_keys=True).encode()
+              digest = hmac.new(secret.encode(), payload, hashlib.sha256).digest()
+              return "aff-" + base64.urlsafe_b64encode(digest).decode().rstrip("=")
+
+
           def handler(event, _context):
               request = event.get("mcp", {}).get("gatewayRequest", {})
               headers = request.get("headers", {})
@@ -257,13 +284,14 @@ Resources:
                       },
                   }
 
-              # Never trust a client-provided scope header; replace it from JWT claims.
+              # Never trust client-provided internal headers; derive them from JWT claims.
               forwarded = {
                   key: value
                   for key, value in headers.items()
                   if key.lower()
                   not in {
                       "authorization",
+                      "mcp-session-id",
                       "x-data-agent-grants",
                       "x-data-agent-identity",
                       "x-data-agent-issued-at",
@@ -272,11 +300,13 @@ Resources:
               }
               grant_header = " ".join(grants)
               issued_at = str(int(time.time()))
+              signing_secret = _signing_secret()
+              forwarded["Mcp-Session-Id"] = _affinity_session_id(signing_secret, claims)
               forwarded["x-data-agent-grants"] = grant_header
               forwarded["x-data-agent-identity"] = identity
               forwarded["x-data-agent-issued-at"] = issued_at
               forwarded["x-data-agent-signature"] = _signature(
-                  _signing_secret(), grant_header, identity, issued_at
+                  signing_secret, grant_header, identity, issued_at
               )
               return {
                   "interceptorOutputVersion": "1.0",

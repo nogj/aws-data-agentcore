@@ -61,9 +61,14 @@ It emits:
 - `x-data-agent-identity`
 - `x-data-agent-issued-at`
 - `x-data-agent-signature`
+- `Mcp-Session-Id`
 
 Targets allowlist only the headers they require. The database Runtime
-propagates `Mcp-Session-Id` for Runtime microVM affinity.
+propagates `Mcp-Session-Id` for Runtime microVM affinity. Until Gateway-managed
+MCP sessions are available through CloudFormation, the request interceptor
+derives this header from verified identity claims with an HMAC and overwrites any
+client-provided value. This is an affinity shim, not Gateway-managed MCP session
+state.
 
 ## Capability Contract
 

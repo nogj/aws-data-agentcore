@@ -49,6 +49,7 @@ def test_inline_interceptor_ignores_roles_in_scopes_mode(monkeypatch) -> None:
     monkeypatch.setenv("ACCEPTED_CLAIMS", "scope,scp")
     monkeypatch.setenv("IDENTITY_CLAIMS", "sub,preferred_username")
     monkeypatch.setenv("HEADER_SIGNING_SECRET_ARN", "secret-arn")
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "data-agent-scope-propagation-test")
 
     event = {
         "mcp": {
@@ -63,6 +64,7 @@ def test_inline_interceptor_ignores_roles_in_scopes_mode(monkeypatch) -> None:
                             "preferred_username": "ana@example.com",
                         }
                     ),
+                    "Mcp-Session-Id": "client-controlled-session",
                     "x-data-agent-grants": "data:sql:read",
                     "x-data-agent-signature": "forged",
                 },
@@ -77,5 +79,49 @@ def test_inline_interceptor_ignores_roles_in_scopes_mode(monkeypatch) -> None:
     assert headers["x-data-agent-grants"] == "data:read"
     assert headers["x-data-agent-signature"] != "forged"
     assert headers["x-data-agent-issued-at"]
+    assert headers["Mcp-Session-Id"].startswith("aff-")
+    assert headers["Mcp-Session-Id"] != "client-controlled-session"
     assert "authorization" not in {key.lower() for key in headers}
     assert "data:sql:read" not in headers["x-data-agent-grants"]
+
+
+def test_inline_interceptor_derives_stable_affinity_session(monkeypatch) -> None:
+    handler = _load_interceptor_handler()
+    handler.__globals__["_SECRET_CACHE"] = "test-secret"
+    monkeypatch.setenv("REQUIRED_SCOPE", "data:read")
+    monkeypatch.setenv("ACCEPTED_CLAIMS", "scope,scp")
+    monkeypatch.setenv("IDENTITY_CLAIMS", "sub,preferred_username")
+    monkeypatch.setenv("HEADER_SIGNING_SECRET_ARN", "secret-arn")
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "data-agent-scope-propagation-test")
+
+    def event_for(sub: str) -> dict[str, object]:
+        return {
+            "mcp": {
+                "gatewayRequest": {
+                    "headers": {
+                        "authorization": "Bearer "
+                        + _jwt(
+                            {
+                                "scp": "data:read",
+                                "sub": sub,
+                                "preferred_username": f"{sub}@example.com",
+                            }
+                        )
+                    },
+                    "body": {"id": "request-1"},
+                }
+            }
+        }
+
+    first = handler(event_for("user-1"), None)["mcp"]["transformedGatewayRequest"][
+        "headers"
+    ]["Mcp-Session-Id"]
+    second = handler(event_for("user-1"), None)["mcp"]["transformedGatewayRequest"][
+        "headers"
+    ]["Mcp-Session-Id"]
+    other = handler(event_for("user-2"), None)["mcp"]["transformedGatewayRequest"][
+        "headers"
+    ]["Mcp-Session-Id"]
+
+    assert first == second
+    assert first != other

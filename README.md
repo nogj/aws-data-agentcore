@@ -251,10 +251,11 @@ export BEARER_TOKEN="$(az account get-access-token \
 ./scripts/agent_cli.sh prod
 ```
 
-The CLI keeps a stable `Mcp-Session-Id` for the interactive process. This helps
-AgentCore Runtime reuse the same microVM while the Runtime session remains
-alive; authorization still relies on Gateway JWT validation and signed
-`x-data-agent-*` headers.
+The Gateway request interceptor derives a stable `Mcp-Session-Id` from verified
+identity claims for Runtime microVM affinity, overwriting any client-provided
+value. The CLI also preserves returned MCP session headers for protocol
+compatibility, but authorization still relies on Gateway JWT validation and
+signed `x-data-agent-*` headers.
 
 ## Configuration Summary
 

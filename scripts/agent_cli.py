@@ -2,7 +2,6 @@ import argparse
 import json
 import os
 import sys
-import uuid
 from typing import Any
 
 try:
@@ -112,8 +111,6 @@ class AgentCli:
         )
         _assert_no_error(initialized.payload)
         self.session_id = _header(initialized.headers, "Mcp-Session-Id")
-        if self.session_id is None:
-            self.session_id = f"data-agent-cli-{uuid.uuid4()}"
 
         _notify(
             self.gateway_url,
@@ -131,7 +128,7 @@ class AgentCli:
         if self.session_id:
             print(f"Session: {self.session_id}")
         else:
-            print("Session: none")
+            print("Session: gateway-managed affinity")
 
     def close(self) -> None:
         _delete_session(self.gateway_url, self.token, self.session_id)
