@@ -257,7 +257,11 @@ The smoke test:
 - initializes an MCP session explicitly;
 - performs `tools/list`;
 - performs `tools/call`;
-- closes the returned `Mcp-Session-Id` when possible.
+- closes a Gateway-returned `Mcp-Session-Id` when one is present.
+
+For Runtime microVM affinity, the Gateway request interceptor derives and
+overwrites `Mcp-Session-Id` from verified identity claims before forwarding to
+the Runtime. Callers do not need to generate this header.
 
 ## 11. Application-Only Alternative
 

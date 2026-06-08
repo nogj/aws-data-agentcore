@@ -764,17 +764,18 @@ Recommended production controls:
 - regular review of allowed relations and columns;
 - smoke tests that cover both MCP `tools/list` and `tools/call` with the
   supported MCP protocol version, read only the expected event-stream payload,
-  and close any returned `Mcp-Session-Id`;
+  and close any Gateway-returned `Mcp-Session-Id`;
 - CI checks for configuration drift and placeholder parameters.
 
 For the stateless database Runtime, Gateway MCP sessions are not required. The
-GatewayTarget propagates `Mcp-Session-Id` to AgentCore Runtime so callers can
-reuse a stable session identifier and preserve microVM affinity across related
-tool calls. This identifier is an affinity and isolation hint, not an
-authorization primitive; authorization continues to rely on the Gateway JWT
-authorizer and the signed `x-data-agent-*` headers. If Gateway MCP sessions are
-enabled for another target, that target must not propagate `Mcp-Session-Id`
-because AgentCore Gateway owns the downstream target session mapping.
+Gateway request interceptor derives a stable `Mcp-Session-Id` from verified
+identity claims and propagates it through the GatewayTarget to AgentCore Runtime
+for microVM affinity. Client-provided `Mcp-Session-Id` values are overwritten.
+This identifier is an affinity and isolation hint, not an authorization
+primitive; authorization continues to rely on the Gateway JWT authorizer and the
+signed `x-data-agent-*` headers. If Gateway MCP sessions are enabled for another
+target, that target must not propagate `Mcp-Session-Id` because AgentCore Gateway
+owns the downstream target session mapping.
 
 ## Security Baseline
 
