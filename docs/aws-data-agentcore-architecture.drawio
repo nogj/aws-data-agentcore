@@ -49,10 +49,10 @@
         <mxCell id="sign-secret" parent="gw-hub" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=8;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.secrets_manager;" value="Signing&#xa;Secret" vertex="1">
           <mxGeometry height="45" width="45" x="260" y="180" as="geometry" />
         </mxCell>
-        <mxCell id="int-note" parent="gw-hub" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fontColor=#232F3E;fillColor=#FFF2E6;strokeColor=#ED7100;size=12;verticalAlign=top;align=left;spacingLeft=6;fontSize=8;" value="• Decode JWT claims&#xa;• Extract grants (scope/scp/roles)&#xa;• Sign x-data-agent-* headers&#xa;• Derive Mcp-Session-Id" vertex="1">
+        <mxCell id="int-note" parent="gw-hub" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fontColor=#232F3E;fillColor=#FFF2E6;strokeColor=#ED7100;size=12;verticalAlign=top;align=left;spacingLeft=6;fontSize=8;" value="• Decode JWT claims&#xa;• Extract grants (scope/scp/roles)&#xa;• Mint x-data-agent-context JWT&#xa;• Derive Mcp-Session-Id" vertex="1">
           <mxGeometry height="70" width="160" x="25" y="290" as="geometry" />
         </mxCell>
-        <mxCell id="headers" parent="gw-hub" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fontColor=#232F3E;fillColor=#E6F2F8;strokeColor=#147EBA;size=12;verticalAlign=top;align=left;spacingLeft=6;fontSize=8;" value="Trusted Headers:&#xa;x-data-agent-grants&#xa;x-data-agent-identity&#xa;x-data-agent-issued-at&#xa;x-data-agent-signature&#xa;Mcp-Session-Id" vertex="1">
+        <mxCell id="headers" parent="gw-hub" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fontColor=#232F3E;fillColor=#E6F2F8;strokeColor=#147EBA;size=12;verticalAlign=top;align=left;spacingLeft=6;fontSize=8;" value="Trusted Context:&#xa;x-data-agent-context&#xa;HS256 JWT&#xa;aud = runtime target&#xa;Mcp-Session-Id" vertex="1">
           <mxGeometry height="95" width="115" x="200" y="290" as="geometry" />
         </mxCell>
         <mxCell id="gw-target" parent="gw-hub" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#147EBA;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=8;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.app_mesh_virtual_gateway;" value="GatewayTarget&#xa;data-agent" vertex="1">
@@ -82,7 +82,7 @@
         <mxCell id="tool" parent="rt-zone" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#232F3E;fontSize=9;fontStyle=1;verticalAlign=middle;align=center;" value="Tool: ask_database&#xa;identity_mode: service&#xa;required_grants: [data:read]" vertex="1">
           <mxGeometry height="55" width="160" x="165" y="360" as="geometry" />
         </mxCell>
-        <mxCell id="auth-py" parent="rt-zone" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fontColor=#232F3E;fillColor=#E6F2F8;strokeColor=#147EBA;fontSize=8;verticalAlign=top;spacingTop=3;spacingLeft=4;" value="authorization.py&#xa;• Verify signed headers&#xa;• Enforce required_grants" vertex="1">
+        <mxCell id="auth-py" parent="rt-zone" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fontColor=#232F3E;fillColor=#E6F2F8;strokeColor=#147EBA;fontSize=8;verticalAlign=top;spacingTop=3;spacingLeft=4;" value="authorization.py&#xa;• Verify context JWT&#xa;• Enforce required_grants" vertex="1">
           <mxGeometry height="55" width="140" x="35" y="450" as="geometry" />
         </mxCell>
         <mxCell id="llm-py" parent="rt-zone" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fontColor=#232F3E;fillColor=#E6F7E6;strokeColor=#01A88D;fontSize=8;verticalAlign=top;spacingTop=3;spacingLeft=4;" value="llm.py&#xa;• Bedrock SQL generation&#xa;• Structured output" vertex="1">
@@ -228,7 +228,7 @@
         <mxCell id="c7" edge="1" parent="1" source="interceptor" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#147EBA;strokeWidth=2;fontColor=#147EBA;fontSize=9;fontStyle=1;" target="gw-target" value="4. Route">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="c8" edge="1" parent="1" source="gw-target" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7AA116;strokeWidth=3;fontColor=#7AA116;fontSize=9;fontStyle=1;" target="runtime" value="5. Signed Headers">
+        <mxCell id="c8" edge="1" parent="1" source="gw-target" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7AA116;strokeWidth=3;fontColor=#7AA116;fontSize=9;fontStyle=1;" target="runtime" value="5. Context JWT">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="680" y="638" />
@@ -312,7 +312,7 @@
         <mxCell id="leg4" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#147EBA;" value="4. Route to GatewayTarget" vertex="1">
           <mxGeometry height="18" width="170" x="45" y="715" as="geometry" />
         </mxCell>
-        <mxCell id="leg5" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#7AA116;" value="5. Forward with signed headers" vertex="1">
+        <mxCell id="leg5" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#7AA116;" value="5. Forward with context JWT" vertex="1">
           <mxGeometry height="18" width="170" x="45" y="735" as="geometry" />
         </mxCell>
         <mxCell id="leg6" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#C925D1;" value="6. MCP tools/call ask_database" vertex="1">

@@ -20,6 +20,10 @@ Parameters:
     Type: String
   HeaderSigningSecretArn:
     Type: String
+  InternalContextAudience:
+    Type: String
+    Default: "runtime:data-agent"
+    Description: Audience claim expected in Gateway-issued internal context JWTs.
   OpenAISecretArn:
     Type: String
     Default: ""
@@ -131,10 +135,7 @@ Resources:
       RequestHeaderConfiguration:
         RequestHeaderAllowlist:
           - Mcp-Session-Id
-          - x-data-agent-grants
-          - x-data-agent-identity
-          - x-data-agent-issued-at
-          - x-data-agent-signature
+          - x-data-agent-context
       NetworkConfiguration:
         NetworkMode: VPC
         NetworkModeConfig:
@@ -146,8 +147,9 @@ Resources:
         CONFIG_BUCKET: !Ref ArtifactBucketName
         CONFIG_KEY: !Ref ConfigKey
         DATABASE_SECRET_ARN: !Ref DatabaseSecretArn
-        GATEWAY_HEADER_SIGNING_SECRET_ARN: !Ref HeaderSigningSecretArn
-        GATEWAY_HEADER_SIGNATURE_TTL_SECONDS: "300"
+        INTERNAL_CONTEXT_SIGNING_SECRET_ARN: !Ref HeaderSigningSecretArn
+        INTERNAL_CONTEXT_ISSUER: data-agent-gateway
+        INTERNAL_CONTEXT_AUDIENCE: !Ref InternalContextAudience
         OPENAI_SECRET_ARN: !Ref OpenAISecretArn
         AWS_REGION: !Ref AWS::Region
       LifecycleConfiguration:

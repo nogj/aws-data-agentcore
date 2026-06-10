@@ -51,7 +51,7 @@ PY
 REGION="$(read_param region)"
 BUCKET="$(read_param artifact_bucket_name)"
 ALLOWED_REQUEST_HEADERS="${ALLOWED_REQUEST_HEADERS:-$(read_optional_agent_param allowed_request_headers)}"
-ALLOWED_REQUEST_HEADERS="${ALLOWED_REQUEST_HEADERS:-Mcp-Session-Id,x-data-agent-grants,x-data-agent-identity,x-data-agent-issued-at,x-data-agent-signature}"
+ALLOWED_REQUEST_HEADERS="${ALLOWED_REQUEST_HEADERS:-Mcp-Session-Id,x-data-agent-context}"
 ALLOWED_RESPONSE_HEADERS="${ALLOWED_RESPONSE_HEADERS:-$(read_optional_agent_param allowed_response_headers)}"
 ALLOWED_RESPONSE_HEADERS="${ALLOWED_RESPONSE_HEADERS:-Mcp-Session-Id}"
 IDLE_RUNTIME_SESSION_TIMEOUT="$(read_optional_agent_param idle_runtime_session_timeout)"
@@ -185,6 +185,7 @@ aws cloudformation deploy \
     RuntimeRoleName="${RUNTIME_ROLE_NAME}" \
     DatabaseSecretArn="${EFFECTIVE_DATABASE_SECRET_ARN}" \
     HeaderSigningSecretArn="${HEADER_SIGNING_SECRET_ARN}" \
+    InternalContextAudience="runtime:${TARGET_NAME}" \
     OpenAISecretArn="$(read_optional_agent_param openai_secret_arn)" \
     PrivateSubnetIds="${EFFECTIVE_PRIVATE_SUBNET_IDS}" \
     RuntimeSecurityGroupIds="${EFFECTIVE_RUNTIME_SECURITY_GROUP_IDS}" \

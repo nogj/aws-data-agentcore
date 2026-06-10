@@ -17,13 +17,14 @@ Runtime IAM role. The Runtime receives only bootstrap references:
 - `CONFIG_BUCKET`
 - `CONFIG_KEY`
 - `DATABASE_SECRET_ARN`
-- `GATEWAY_HEADER_SIGNING_SECRET_ARN`
+- `INTERNAL_CONTEXT_SIGNING_SECRET_ARN`
+- `INTERNAL_CONTEXT_AUDIENCE`
 - `OPENAI_SECRET_ARN` when OpenAI is enabled
 
 The Runtime loads non-sensitive configuration from S3 on invocation and loads
 sensitive values from Secrets Manager. The IAM role is scoped to the configured
-artifact object, config object, database secret, header-signing secret, optional
-OpenAI secret, Bedrock model invocation, and AgentCore logs.
+artifact object, config object, database secret, internal context signing
+secret, optional OpenAI secret, Bedrock model invocation, and AgentCore logs.
 
 `infrastructure/private-endpoints.yaml` creates the private AWS service
 endpoints required by the Runtime: S3, Secrets Manager, Bedrock Runtime, and
@@ -61,7 +62,7 @@ subnet, security group, or secret ARN.
 
 ```text
 app/
-├── authorization.py          Shared signed-header and grant helpers
+├── authorization.py          Shared internal context JWT and grant helpers
 ├── audit.py                  Shared structured audit helper
 ├── config.py                 Shared validated configuration model
 └── capabilities/
@@ -87,8 +88,8 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Client->>Gateway: tools/call ask_database
-    Gateway->>Runtime: MCP request with signed grants and identity headers
-    Runtime->>Runtime: Verify Gateway header signature
+    Gateway->>Runtime: MCP request with x-data-agent-context
+    Runtime->>Runtime: Verify internal context JWT
     Runtime->>Runtime: Enforce required_grants
     Runtime->>Runtime: Validate question and context bounds
     Runtime->>LLM: Generate structured SQL candidate

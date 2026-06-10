@@ -123,7 +123,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       Policies:
-        - PolicyName: ReadHeaderSigningSecret
+        - PolicyName: ReadInternalContextSigningSecret
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -135,7 +135,7 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub "/data-agent/${Environment}/gateway-header-signing"
-      Description: Shared secret used by the Gateway interceptor to sign Runtime authorization headers.
+      Description: Shared secret used by the Gateway interceptor to sign internal Runtime context JWTs.
       GenerateSecretString:
         SecretStringTemplate: "{}"
         GenerateStringKey: secret
@@ -157,6 +157,9 @@ Resources:
           ACCEPTED_CLAIMS: !Join [",", !Ref AcceptedClaims]
           IDENTITY_CLAIMS: !Join [",", !Ref IdentityClaims]
           HEADER_SIGNING_SECRET_ARN: !Ref HeaderSigningSecret
+          INTERNAL_CONTEXT_ISSUER: data-agent-gateway
+          INTERNAL_CONTEXT_DEFAULT_AUDIENCE: runtime:data-agent
+          INTERNAL_CONTEXT_TTL_SECONDS: "300"
       Code:
         ZipFile: |
           import base64
@@ -198,19 +201,17 @@ Resources:
               return sorted(set(grants))
 
 
-          def _identity_header(claims):
+          def _identity_claims(claims):
               identity_claims = [
                   claim.strip()
                   for claim in os.environ["IDENTITY_CLAIMS"].split(",")
                   if claim.strip()
               ]
-              selected = {
+              return {
                   claim: claims[claim]
                   for claim in identity_claims
                   if isinstance(claims.get(claim), str) and claims.get(claim)
               }
-              payload = json.dumps(selected, separators=(",", ":"), sort_keys=True).encode()
-              return base64.urlsafe_b64encode(payload).decode().rstrip("=")
 
 
           def _signing_secret():
@@ -223,10 +224,51 @@ Resources:
               return _SECRET_CACHE
 
 
-          def _signature(secret, grants, identity, issued_at):
-              payload = "\n".join([grants, identity, issued_at]).encode()
-              digest = hmac.new(secret.encode(), payload, hashlib.sha256).digest()
-              return base64.urlsafe_b64encode(digest).decode().rstrip("=")
+          def _base64url(raw):
+              return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+          def _target_audience(event, request):
+              for value in (
+                  event.get("mcp", {}).get("targetName"),
+                  event.get("mcp", {}).get("target"),
+                  event.get("mcp", {}).get("gatewayTargetName"),
+                  request.get("targetName"),
+                  request.get("target"),
+                  request.get("gatewayTargetName"),
+              ):
+                  if isinstance(value, str) and value:
+                      return "runtime:" + value
+              body = request.get("body", {})
+              params = body.get("params", {}) if isinstance(body, dict) else {}
+              tool_name = params.get("name") if isinstance(params, dict) else None
+              if isinstance(tool_name, str) and "___" in tool_name:
+                  return "runtime:" + tool_name.split("___", 1)[0]
+              return os.environ["INTERNAL_CONTEXT_DEFAULT_AUDIENCE"]
+
+
+          def _internal_context_jwt(secret, grants, identity, audience):
+              issued_at = int(time.time())
+              ttl_seconds = int(os.environ.get("INTERNAL_CONTEXT_TTL_SECONDS", "300"))
+              header = {"alg": "HS256", "typ": "JWT"}
+              payload = {
+                  "ver": "1",
+                  "iss": os.environ.get("INTERNAL_CONTEXT_ISSUER", "data-agent-gateway"),
+                  "aud": audience,
+                  "grants": grants,
+                  "identity": identity,
+                  "iat": issued_at,
+                  "exp": issued_at + ttl_seconds,
+              }
+              encoded_header = _base64url(
+                  json.dumps(header, separators=(",", ":"), sort_keys=True).encode()
+              )
+              encoded_payload = _base64url(
+                  json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+              )
+              signing_input = f"{encoded_header}.{encoded_payload}".encode()
+              digest = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
+              return f"{encoded_header}.{encoded_payload}.{_base64url(digest)}"
 
 
           def _affinity_session_id(secret, claims):
@@ -263,10 +305,10 @@ Resources:
               try:
                   claims = _decode_claims(normalized_headers.get("authorization", ""))
                   grants = _decode_grants(claims)
-                  identity = _identity_header(claims)
+                  identity = _identity_claims(claims)
               except Exception:
                   grants = []
-                  identity = ""
+                  identity = {}
 
               required_scope = os.environ["REQUIRED_SCOPE"]
               if required_scope not in grants:
@@ -296,17 +338,13 @@ Resources:
                       "x-data-agent-identity",
                       "x-data-agent-issued-at",
                       "x-data-agent-signature",
+                      "x-data-agent-context",
                   }
               }
-              grant_header = " ".join(grants)
-              issued_at = str(int(time.time()))
               signing_secret = _signing_secret()
               forwarded["Mcp-Session-Id"] = _affinity_session_id(signing_secret, claims)
-              forwarded["x-data-agent-grants"] = grant_header
-              forwarded["x-data-agent-identity"] = identity
-              forwarded["x-data-agent-issued-at"] = issued_at
-              forwarded["x-data-agent-signature"] = _signature(
-                  signing_secret, grant_header, identity, issued_at
+              forwarded["x-data-agent-context"] = _internal_context_jwt(
+                  signing_secret, grants, identity, _target_audience(event, request)
               )
               return {
                   "interceptorOutputVersion": "1.0",

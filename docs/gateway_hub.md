@@ -13,7 +13,7 @@ the trusted context each target needs.
 - versioned artifact/config S3 bucket
 - JWT/OIDC authorization configuration
 - request interceptor Lambda
-- Secrets Manager header-signing secret
+- Secrets Manager internal context JWT signing secret
 - CloudWatch log retention for the interceptor
 
 These resources are shared by all targets in the same environment. Runtime
@@ -33,15 +33,15 @@ sequenceDiagram
     Gateway->>Gateway: Validate AllowedScopes when mode=scopes
     Gateway->>Interceptor: Invoke request interceptor
     Interceptor->>Interceptor: Extract configured grants and identity claims
-    Interceptor->>Interceptor: Sign bounded internal headers
+    Interceptor->>Interceptor: Mint short-lived internal context JWT
     Gateway->>Target: Forward MCP request and target allowlisted headers
-    Target->>Target: Verify signed headers and enforce capability policy
+    Target->>Target: Verify internal JWT and enforce capability policy
     Target-->>Client: MCP response
 ```
 
-The Runtime must fail closed when trusted headers are missing, unsigned, stale,
-or tampered with. Gateway validation is necessary but not the only enforcement
-point.
+The Runtime must fail closed when the trusted internal context is missing,
+expired, has the wrong audience, or is tampered with. Gateway validation is
+necessary but not the only enforcement point.
 
 ## Authorization Modes
 
@@ -57,13 +57,13 @@ The hub supports two inbound grant modes:
 The request interceptor replaces caller-supplied internal authorization headers.
 It emits:
 
-- `x-data-agent-grants`
-- `x-data-agent-identity`
-- `x-data-agent-issued-at`
-- `x-data-agent-signature`
+- `x-data-agent-context`
 - `Mcp-Session-Id`
 
-Targets allowlist only the headers they require. The database Runtime
+`x-data-agent-context` is a short-lived HS256 JWT signed with the shared
+internal context secret. Runtimes validate `iss`, their own `aud`, `iat`, `exp`,
+and the signature before reading grants or identity claims. Targets allowlist
+only the headers they require. The database Runtime
 propagates `Mcp-Session-Id` for Runtime microVM affinity. Until Gateway-managed
 MCP sessions are available through CloudFormation, the request interceptor
 derives this header from verified identity claims with an HMAC and overwrites any

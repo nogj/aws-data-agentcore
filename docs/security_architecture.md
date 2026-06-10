@@ -99,10 +99,10 @@ The hub design has shared boundaries plus module-local boundaries:
 1. **Gateway boundary**: authenticates inbound callers and performs first-pass
    authorization using OIDC/JWT validation. Gateway is shared by modules.
 2. **Interceptor boundary**: derives trusted grants and bounded caller identity
-   from validated tokens, strips caller-forged internal headers, and signs the
-   internal headers consumed by the Runtime.
+   from validated tokens, strips caller-forged internal headers, and mints the
+   internal context JWT consumed by the Runtime.
 3. **Target boundary**: each target enforces its own capability policy from
-   trusted headers and applies module-specific input/output controls.
+   trusted internal context and applies module-specific input/output controls.
 4. **Resource boundary**: each downstream resource enforces its own final
    controls, such as database grants, KB filters, SaaS ACLs, or internal API
    policies.
@@ -140,7 +140,7 @@ Role and credential ownership summary:
 - **Gateway role**: AWS service role used by Gateway to invoke targets and the
   interceptor.
 - **Runtime role**: AWS service role used by AgentCore Runtime to read config,
-  secrets, verify Gateway-signed headers, invoke models, and log.
+  secrets, verify Gateway-issued internal context JWTs, invoke models, and log.
 - **Interceptor role**: Lambda execution role used only for request
   transformation and logging.
 - **Database role**: PostgreSQL read-only technical role used by the database
@@ -255,26 +255,26 @@ The interceptor:
   mode, or `roles` in `claims` mode;
 - denies the request if `required_scope` is missing;
 - extracts only allowlisted identity claims;
-- removes caller-supplied `authorization`, `x-data-agent-grants`, and
-  `x-data-agent-identity` headers;
-- injects trusted `x-data-agent-grants` and `x-data-agent-identity` headers.
+- removes caller-supplied `authorization` and internal context headers;
+- injects trusted `x-data-agent-context` with a short-lived internal JWT.
 
 The Runtime and Gateway target allowlist only these internal headers:
 
 ```yaml
 RequestHeaderAllowlist:
-  - x-data-agent-grants
-  - x-data-agent-identity
+  - x-data-agent-context
 ```
 
 This avoids trusting client-provided authorization headers while still giving
-the Runtime the caller context it needs for capability decisions and audit.
+the Runtime the caller context it needs for capability decisions and audit. Each
+Runtime validates the token's `aud` against its own expected audience before
+using grants or identity.
 
 The interceptor code is embedded inline in the CloudFormation template. Runtime
 authorization helpers live separately in `app/authorization.py` because the
-Runtime consumes trusted headers while the interceptor decodes inbound JWT
-claims. A dedicated test loads and executes the inline Lambda handler from the
-template to reduce drift risk.
+Runtime consumes trusted internal context while the interceptor decodes inbound
+JWT claims. A dedicated test loads and executes the inline Lambda handler from
+the template to reduce drift risk.
 
 ## Capability And Target Model
 
@@ -705,7 +705,7 @@ deployment automation or pass the equivalent parameters to
       "oauth_provider_arn": "arn:aws:bedrock-agentcore:eu-west-1:111122223333:token-vault/default/oauth2credentialprovider/entra-docs-obo",
       "oauth_scopes": "https://graph.microsoft.com/.default",
       "oauth_grant_type": "TOKEN_EXCHANGE",
-      "allowed_request_headers": "x-data-agent-grants,x-data-agent-identity"
+      "allowed_request_headers": "x-data-agent-context"
     }
   }
 }
@@ -721,7 +721,7 @@ rollback expectations, and explicit write grants.
 The architecture mitigates:
 
 - unauthenticated access to the Gateway;
-- client-forged grant headers;
+- client-forged internal authorization context;
 - missing or incorrect JWT audience;
 - token-version and issuer mismatches between IdP configuration and Gateway
   discovery URL;
@@ -773,9 +773,9 @@ identity claims and propagates it through the GatewayTarget to AgentCore Runtime
 for microVM affinity. Client-provided `Mcp-Session-Id` values are overwritten.
 This identifier is an affinity and isolation hint, not an authorization
 primitive; authorization continues to rely on the Gateway JWT authorizer and the
-signed `x-data-agent-*` headers. If Gateway MCP sessions are enabled for another
-target, that target must not propagate `Mcp-Session-Id` because AgentCore Gateway
-owns the downstream target session mapping.
+short-lived `x-data-agent-context` JWT. If Gateway MCP sessions are enabled for
+another target, that target must not propagate `Mcp-Session-Id` because
+AgentCore Gateway owns the downstream target session mapping.
 
 ## Security Baseline
 

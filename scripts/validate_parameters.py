@@ -153,7 +153,7 @@ def _validate_target_credential_config(parameters: dict[str, Any]) -> None:
 
 
 def _validate_allowed_request_headers(parameters: dict[str, Any]) -> None:
-    """Ensure the GatewayTarget forwards MCP affinity and signed auth headers."""
+    """Ensure the GatewayTarget forwards MCP affinity and internal context JWT."""
 
     configured = parameters.get("allowed_request_headers")
     if not configured:
@@ -165,15 +165,12 @@ def _validate_allowed_request_headers(parameters: dict[str, Any]) -> None:
     }
     required = {
         "mcp-session-id",
-        "x-data-agent-grants",
-        "x-data-agent-identity",
-        "x-data-agent-issued-at",
-        "x-data-agent-signature",
+        "x-data-agent-context",
     }
     missing = sorted(required - headers)
     if missing:
         raise SystemExit(
-            "allowed_request_headers must include signed Gateway headers: "
+            "allowed_request_headers must include internal Gateway context headers: "
             + ", ".join(missing)
         )
 

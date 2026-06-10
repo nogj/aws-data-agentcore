@@ -113,7 +113,7 @@ def test_rejects_allowed_headers_without_signature_headers() -> None:
             }
         )
     except SystemExit as exc:
-        assert "x-data-agent-signature" in str(exc)
+        assert "x-data-agent-context" in str(exc)
         return
     raise AssertionError("Expected SystemExit")
 
@@ -122,8 +122,7 @@ def test_accepts_allowed_headers_with_signature_headers() -> None:
     _validate_allowed_request_headers(
         {
             "allowed_request_headers": (
-                "Mcp-Session-Id,x-data-agent-grants,x-data-agent-identity,"
-                "x-data-agent-issued-at,x-data-agent-signature"
+                "Mcp-Session-Id,x-data-agent-context"
             )
         }
     )
@@ -134,8 +133,7 @@ def test_rejects_allowed_headers_without_mcp_session_id() -> None:
         _validate_allowed_request_headers(
             {
                 "allowed_request_headers": (
-                    "x-data-agent-grants,x-data-agent-identity,"
-                    "x-data-agent-issued-at,x-data-agent-signature"
+                    "x-data-agent-context"
                 )
             }
         )

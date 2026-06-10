@@ -1,11 +1,9 @@
 from app.authorization import (
     CallerIdentity,
-    encode_identity,
-    gateway_header_signature,
     grants_from_claims,
     identity_from_claims,
-    identity_from_header,
-    verify_gateway_header_signature,
+    issue_internal_context_jwt,
+    verify_internal_context_jwt,
 )
 
 
@@ -43,54 +41,101 @@ def test_extracts_bounded_identity_claims() -> None:
     }
 
 
-def test_round_trips_identity_header() -> None:
-    encoded = encode_identity(
-        CallerIdentity(claims={"sub": "user-1", "azp": "client-1"})
+def test_verifies_internal_context_jwt() -> None:
+    token = issue_internal_context_jwt(
+        "secret",
+        issuer="data-agent-gateway",
+        audience="runtime:cmdb",
+        grants=["data:read"],
+        identity=CallerIdentity(claims={"sub": "user-1"}),
+        ttl_seconds=300,
+        now=1000,
     )
 
-    assert identity_from_header(encoded).audit_fields() == {
-        "caller_subject": "user-1",
-        "caller_azp": "client-1",
-    }
-
-
-def test_verifies_signed_gateway_headers() -> None:
-    signature = gateway_header_signature("secret", "data:read", "identity", "1000")
-
-    assert verify_gateway_header_signature(
+    grants, identity = verify_internal_context_jwt(
         "secret",
-        "data:read",
-        "identity",
-        "1000",
-        signature,
-        ttl_seconds=300,
+        token,
+        issuer="data-agent-gateway",
+        audience="runtime:cmdb",
         now=1100,
     )
 
+    assert grants == {"data:read"}
+    assert identity.subject == "user-1"
 
-def test_rejects_tampered_gateway_headers() -> None:
-    signature = gateway_header_signature("secret", "data:read", "identity", "1000")
 
-    assert not verify_gateway_header_signature(
+def test_rejects_internal_context_wrong_audience() -> None:
+    token = issue_internal_context_jwt(
         "secret",
-        "data:read data:sql:read",
-        "identity",
-        "1000",
-        signature,
+        issuer="data-agent-gateway",
+        audience="runtime:cmdb",
+        grants=["data:read"],
+        identity=CallerIdentity(claims={"sub": "user-1"}),
         ttl_seconds=300,
-        now=1100,
+        now=1000,
     )
 
+    try:
+        verify_internal_context_jwt(
+            "secret",
+            token,
+            issuer="data-agent-gateway",
+            audience="runtime:assets",
+            now=1100,
+        )
+    except PermissionError as exc:
+        assert str(exc) == "invalid_internal_context"
+        return
+    raise AssertionError("Expected PermissionError")
 
-def test_rejects_stale_gateway_headers() -> None:
-    signature = gateway_header_signature("secret", "data:read", "identity", "1000")
 
-    assert not verify_gateway_header_signature(
+def test_rejects_expired_internal_context_jwt() -> None:
+    token = issue_internal_context_jwt(
         "secret",
-        "data:read",
-        "identity",
-        "1000",
-        signature,
+        issuer="data-agent-gateway",
+        audience="runtime:cmdb",
+        grants=["data:read"],
+        identity=CallerIdentity(claims={"sub": "user-1"}),
         ttl_seconds=300,
-        now=1401,
+        now=1000,
     )
+
+    try:
+        verify_internal_context_jwt(
+            "secret",
+            token,
+            issuer="data-agent-gateway",
+            audience="runtime:cmdb",
+            now=1400,
+        )
+    except PermissionError as exc:
+        assert str(exc) == "expired_internal_context"
+        return
+    raise AssertionError("Expected PermissionError")
+
+
+def test_rejects_tampered_internal_context_jwt() -> None:
+    token = issue_internal_context_jwt(
+        "secret",
+        issuer="data-agent-gateway",
+        audience="runtime:cmdb",
+        grants=["data:read"],
+        identity=CallerIdentity(claims={"sub": "user-1"}),
+        ttl_seconds=300,
+        now=1000,
+    )
+
+    tampered = token[:-1] + ("a" if token[-1] != "a" else "b")
+
+    try:
+        verify_internal_context_jwt(
+            "secret",
+            tampered,
+            issuer="data-agent-gateway",
+            audience="runtime:cmdb",
+            now=1100,
+        )
+    except PermissionError as exc:
+        assert str(exc) == "invalid_internal_context"
+        return
+    raise AssertionError("Expected PermissionError")

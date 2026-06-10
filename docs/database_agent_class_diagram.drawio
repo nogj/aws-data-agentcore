@@ -49,7 +49,7 @@
         <mxCell id="ResponseBuilder" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacing=8;" value="&lt;b&gt;response()&lt;/b&gt;&lt;hr&gt;+ trace_id: str&lt;br&gt;+ elapsed_ms: int&lt;hr&gt;+ builds AskDatabaseResponse&lt;br&gt;+ excludes null fields" vertex="1">
           <mxGeometry height="110" width="280" x="570" y="470" as="geometry" />
         </mxCell>
-        <mxCell id="TrustedGatewayContext" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacing=8;" value="&lt;b&gt;_trusted_gateway_context()&lt;/b&gt;&lt;hr&gt;+ ctx: Context&lt;br&gt;+ signing_secret: str&lt;hr&gt;+ verifies signed x-data-agent-* headers&lt;br&gt;+ returns (grants, CallerIdentity)" vertex="1">
+        <mxCell id="TrustedGatewayContext" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacing=8;" value="&lt;b&gt;_trusted_gateway_context()&lt;/b&gt;&lt;hr&gt;+ ctx: Context&lt;br&gt;+ signing_secret: str&lt;hr&gt;+ verifies x-data-agent-context JWT&lt;br&gt;+ validates runtime audience&lt;br&gt;+ returns (grants, CallerIdentity)" vertex="1">
           <mxGeometry height="145" width="310" x="1030" y="150" as="geometry" />
         </mxCell>
         <mxCell id="CallerIdentity" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacing=8;" value="&lt;b&gt;CallerIdentity&lt;/b&gt;&lt;hr&gt;+ claims: dict[str, str]&lt;hr&gt;+ subject: str | None&lt;br&gt;+ display_name: str | None&lt;br&gt;+ audit_fields(): dict[str, str]" vertex="1">

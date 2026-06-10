@@ -33,7 +33,7 @@ Start here, then follow the document that matches the layer you are changing:
 ```text
 aws-data-agentcore/
 ├── app/                     Runtime Python code
-│   ├── authorization.py      Shared trusted-header and grant helpers
+│   ├── authorization.py      Shared internal context JWT and grant helpers
 │   ├── audit.py              Shared structured audit helper
 │   ├── config.py             Shared validated configuration model
 │   └── capabilities/
@@ -42,7 +42,7 @@ aws-data-agentcore/
 ├── docs/                    Architecture, security, and setup guides
 ├── infrastructure/          CloudFormation stacks
 │   ├── agent-foundation.yaml Per-agent managed subnets, Runtime SG, and secret
-│   ├── bootstrap.yaml        Shared Gateway hub, bucket, interceptor, signing secret
+│   ├── bootstrap.yaml        Shared Gateway hub, bucket, interceptor, context secret
 │   ├── gateway-identity-permissions.yaml
 │   │                         Optional Gateway permissions for OBO targets
 │   ├── parameters.json       Example parameter file
@@ -65,7 +65,7 @@ The bootstrap stack is shared per environment:
 - Gateway IAM role
 - JWT/OIDC authorizer settings
 - request interceptor Lambda
-- header-signing secret
+- internal context JWT signing secret
 - versioned artifact/config bucket
 
 Each Runtime target is deployed separately:
@@ -255,7 +255,7 @@ The Gateway request interceptor derives a stable `Mcp-Session-Id` from verified
 identity claims for Runtime microVM affinity, overwriting any client-provided
 value. The CLI also preserves returned MCP session headers for protocol
 compatibility, but authorization still relies on Gateway JWT validation and
-signed `x-data-agent-*` headers.
+the short-lived internal `x-data-agent-context` JWT.
 
 ## Configuration Summary
 
@@ -264,7 +264,8 @@ The Runtime receives only bootstrap references through environment variables:
 - `CONFIG_BUCKET`
 - `CONFIG_KEY`
 - `DATABASE_SECRET_ARN`
-- `GATEWAY_HEADER_SIGNING_SECRET_ARN`
+- `INTERNAL_CONTEXT_SIGNING_SECRET_ARN`
+- `INTERNAL_CONTEXT_AUDIENCE`
 - `OPENAI_SECRET_ARN` when OpenAI is enabled
 - `APP_ENV`
 - `AWS_REGION`

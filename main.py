@@ -11,9 +11,7 @@ from mcp.server.fastmcp import Context, FastMCP
 
 from app.authorization import (
     CallerIdentity,
-    claim_values,
-    identity_from_header,
-    verify_gateway_header_signature,
+    verify_internal_context_jwt,
 )
 from app.audit import emit
 from app.capabilities.database.database import execute_read_only_sql
@@ -41,43 +39,41 @@ mcp = FastMCP(
 
 
 def _gateway_header_secret() -> str:
-    """Load the shared secret used to authenticate Gateway-propagated headers."""
+    """Load the shared secret used to authenticate Gateway-propagated context."""
 
-    secret = load_secret(os.environ["GATEWAY_HEADER_SIGNING_SECRET_ARN"])
+    secret = load_secret(os.environ["INTERNAL_CONTEXT_SIGNING_SECRET_ARN"])
     return str(secret["secret"])
 
 
-def _gateway_signature_ttl_seconds() -> int:
-    """Return the accepted age for signed Gateway headers."""
+def _internal_context_issuer() -> str:
+    return os.environ.get("INTERNAL_CONTEXT_ISSUER", "data-agent-gateway")
 
-    return int(os.environ.get("GATEWAY_HEADER_SIGNATURE_TTL_SECONDS", "300"))
+
+def _internal_context_audience() -> str:
+    return os.environ["INTERNAL_CONTEXT_AUDIENCE"]
 
 
 def _trusted_gateway_context(
     ctx: Context | None, signing_secret: str
 ) -> tuple[set[str], CallerIdentity]:
-    """Read trusted authorization grants and identity from signed Gateway headers."""
+    """Read trusted authorization grants and identity from the internal context JWT."""
 
     if ctx is None:
         raise PermissionError("missing_gateway_context")
     try:
         request = ctx.request_context.request
-        grants = request.headers.get("x-data-agent-grants", "")
-        identity = request.headers.get("x-data-agent-identity", "")
-        issued_at = request.headers.get("x-data-agent-issued-at", "")
-        signature = request.headers.get("x-data-agent-signature", "")
+        token = request.headers.get("x-data-agent-context", "")
     except AttributeError:
         raise PermissionError("missing_gateway_context") from None
-    if not verify_gateway_header_signature(
-        signing_secret,
-        grants,
-        identity,
-        issued_at,
-        signature,
-        ttl_seconds=_gateway_signature_ttl_seconds(),
-    ):
-        raise PermissionError("invalid_gateway_signature")
-    return set(claim_values(grants)), identity_from_header(identity)
+    try:
+        return verify_internal_context_jwt(
+            signing_secret,
+            token,
+            issuer=_internal_context_issuer(),
+            audience=_internal_context_audience(),
+        )
+    except PermissionError as exc:
+        raise PermissionError(str(exc)) from None
 
 
 def _response_rows(

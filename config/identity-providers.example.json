@@ -13,8 +13,7 @@
       ],
       "grant_type": "TOKEN_EXCHANGE",
       "allowed_request_headers": [
-        "x-data-agent-grants",
-        "x-data-agent-identity"
+        "x-data-agent-context"
       ],
       "notes": "Use only for targets that require delegated user access. Database agents should remain identity_mode=service."
     },
@@ -31,8 +30,7 @@
       ],
       "grant_type": "TOKEN_EXCHANGE",
       "allowed_request_headers": [
-        "x-data-agent-grants",
-        "x-data-agent-identity"
+        "x-data-agent-context"
       ],
       "notes": "Write-capable OBO targets also need approval gates, idempotency, and explicit write grants."
     }

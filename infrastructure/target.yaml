@@ -14,7 +14,7 @@ Parameters:
     Type: String
   AllowedRequestHeaders:
     Type: CommaDelimitedList
-    Default: "Mcp-Session-Id,x-data-agent-grants,x-data-agent-identity,x-data-agent-issued-at,x-data-agent-signature"
+    Default: "Mcp-Session-Id,x-data-agent-context"
   AllowedResponseHeaders:
     Type: CommaDelimitedList
     Default: "Mcp-Session-Id"
